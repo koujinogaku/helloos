@@ -1,0 +1,44 @@
+helloos
+=======
+
+Hello OS: Original pre-emptive multitasking operating system.
+
+Hello World!
+This is the HelloOS!
+
+Build:
+- make clean
+- make
+
+
+Install:
+- Copy the hello.img as a virtual floppy disk to a virtual machine.
+- Boot the Hello OS from virtual floppy disk.
+
+
+Run Demo:
+- mouse &
+- tstdemox
+- Click mouse on any place. You can see the demo.
+- Press escape key to end.
+
+
+Other Commands on command line:
+- DIR              - Show file names
+- TYPE [FileName]  - Show text in a file.
+- [FileName]       - Run a program file that name is *.out.
+
+
+Program detail:
+- This is a pre-emptive multitasking operating system.
+- Runs on the 32bit protect mode of the Intel i386 CPU.
+- Use a virtual memory paging on a virtual memory management of the Intel x86.
+- Don't use a memory segmentation of the Intel x86.
+- Control tasks by Intel x86 that is not a original controller.
+- Therefore difficult to convert to other processor architecture.
+- This operating system is similar to a micro kernel based it.
+- Convert hardware interrupts to message and send it to hardware driver programs.
+- Use a Command line interface basically.
+- A window manager can be invoked from the command line that is still under development.
+
+
