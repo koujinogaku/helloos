@@ -1,0 +1,8 @@
+*.o
+*.a
+*.out
+*.sys
+*.exe
+*.map
+*.touch
+*.img
