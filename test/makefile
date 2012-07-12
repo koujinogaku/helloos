@@ -15,13 +15,20 @@ STARTOBJ=$(STDLIBDIR)/startappl.o
 APPLIB=$(STDLIBDIR)/libappl.a
 MICROWINLIB=$(MICROWINDIR)/lib/libmwnanox.a $(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a
 
+TST  =tst.o
+TST2 =tst2.o
 TESTMWINOBJ= testmwin.o
 TSTNANOX= tstnanox.o
 TSTMOUSE= tstmouse.o
 TSTDEMOX= tstdemox.o
 
-all: tstdemox.out #tstnanox.out tstmouse.out testmwin.out 
-	touch make.touch
+all: tst.out tst2.out #tstdemox.out tstnanox.out tstmouse.out testmwin.out 
+
+tst.out: $(TST) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TST) $(APPLIB) -o $@
+
+tst2.out: $(TST2) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TST2) $(APPLIB) -o $@
 
 tstmouse.out: $(TSTMOUSE) $(APPLIB) $(MICROWINLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TSTMOUSE) $(APPLIB) -o $@
@@ -54,6 +61,7 @@ clean:
 	rm -f *.o
 	rm -f *.a
 	rm -f *.exe
+	rm -f make.touch
 
 dump:
 	objdump -b binary -m i8086 -D hello.img

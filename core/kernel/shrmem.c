@@ -18,12 +18,12 @@ struct SHM {
   struct SHM *prev;
   unsigned int id;
   unsigned int status;
-  void *pages[SHM_MAXPAGES];
+  int *pages;
   unsigned int pagecnt;
   unsigned int mappedcnt;
 };
 
-#define SHM_TBLSZ 32
+#define SHM_TBLSZ 128
 static struct SHM *shmtbl=0;
 static int shm_tbl_mutex=0;
 
@@ -67,8 +67,8 @@ int shm_create(unsigned int shmid, unsigned int size)
       break;
   }
   if(shmtbl!=shm){
-    return ERRNO_INUSE;
     mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_INUSE;
   }
   list_alloc(shmtbl,SHM_TBLSZ,shm_idx)
   if(shm_idx==0) {
@@ -76,12 +76,17 @@ int shm_create(unsigned int shmid, unsigned int size)
     return ERRNO_RESOURCE;
   }
   shm=&shmtbl[shm_idx];
+  if(shm->pages) {
+    mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_RESOURCE;
+  }
   shm->status=SHM_STAT_USED;
 
 //console_puts("[c]");
 
+  shm->pages = mem_alloc(SHM_MAXPAGES*sizeof(unsigned int));
   for(i=0;i<pagecnt;i++) {
-    shm->pages[i]=page_alloc();
+    shm->pages[i]=(int)page_alloc();
 /*
 long2hex((int)shm->pages[i],s);
 console_puts(s);
@@ -89,7 +94,9 @@ console_puts(" ");
 */
     if(shm->pages[i]==0) {
       for(i--;i>=0;i--)
-        page_free(shm->pages[i]);
+        page_free((void *)shm->pages[i]);
+      page_free(shm->pages);
+      shm->status=SHM_STAT_NOTUSE;
       mutex_unlock(&shm_tbl_mutex);
       return ERRNO_RESOURCE;
     }
@@ -124,18 +131,14 @@ int shm_delete(unsigned int shmid)
     mutex_unlock(&shm_tbl_mutex);
     return ERRNO_INUSE;
   }
-//console_puts("[d]");
-
-  for(i=0;i<shm->pagecnt;i++) {
-    page_free(shm->pages[i]);
-/*
-long2hex((int)shm->pages[i],s);
-console_puts(s);
-console_puts(" ");
-*/
-  }
 
   list_del(shm);
+
+  for(i=0;i<shm->pagecnt;i++) {
+    page_free((void*)shm->pages[i]);
+  }
+  mem_free(shm->pages,SHM_MAXPAGES*sizeof(unsigned int));
+
   shm->status=SHM_STAT_NOTUSE;
 
   mutex_unlock(&shm_tbl_mutex);
@@ -217,7 +220,7 @@ int shm_unmap(unsigned int shmid,void *pgd, void *vmem)
       mutex_unlock(&shm_tbl_mutex);
       return ERRNO_CTRLBLOCK;
     }
-    if(ppage!=shm->pages[i]) {
+    if(ppage!=(void*)shm->pages[i]) {
 /*
 console_puts("[");
 long2hex((int)vpage,s);

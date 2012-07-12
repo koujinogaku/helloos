@@ -1,9 +1,9 @@
 #ifndef SHRMEM_H
 #define SHRMEM_H
 
-#include "config.h"
-#define SHM_MAXPAGES 16
-#define SHM_MAXSIZE (CFG_MEM_PAGESIZE*SHM_MAXPAGES)
+#include "page.h"
+#define SHM_MAXPAGES (PAGE_PAGESIZE/sizeof(unsigned int))
+#define SHM_MAXSIZE (PAGE_PAGESIZE*SHM_MAXPAGES)
 
 int shm_init(void);
 int shm_create(unsigned int shmid, unsigned int size);

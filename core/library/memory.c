@@ -1,4 +1,4 @@
-/* ƒƒ‚ƒŠŠÇ— */
+/* Memory Managemant */
 
 #include "config.h"
 #include "memory.h"

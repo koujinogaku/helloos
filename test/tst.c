@@ -7,7 +7,8 @@
 #include "config.h"
 #include "mouse.h"
 #include "message.h"
-#include "window.h"
+#include "shm.h"
+//#include "window.h"
 
 void puts(char *str)
 {
@@ -116,7 +117,7 @@ void tst_shm(void)
 //  display_puts("\n");
 
   memcpy((void*)SHRMEMADDR,"ABCD",4);
-  syscall_wait(100);
+  syscall_wait(1000);
 
   r=syscall_shm_unmap(SHRMEMNAME,SHRMEMADDR);
   display_puts(" shm unmap=");
@@ -143,6 +144,35 @@ void tst_shm(void)
   display_puts("\n");
 */
 }
+void tst_shm2(void)
+{
+  int r;
+
+  r=shm_create(SHRMEMNAME,4);
+  display_puts("shm create=");
+  sint2dec(r,s);
+  display_puts(s);
+
+  r=shm_map(SHRMEMNAME,(char*)SHRMEMADDR);
+  display_puts(" shm map=");
+  sint2dec(r,s);
+  display_puts(s);
+
+  memcpy((void*)SHRMEMADDR,"ABCD",4);
+  syscall_wait(1000);
+
+  r=shm_unmap(SHRMEMNAME);
+  display_puts(" shm unmap=");
+  sint2dec(r,s);
+  display_puts(s);
+
+  r=shm_delete(SHRMEMNAME);
+  display_puts(" shm2 delete=");
+  sint2dec(r,s);
+  display_puts(s);
+  display_puts("\n");
+}
+
 
 #define QUENAME  1
 #define QUENAME2 2
@@ -613,7 +643,7 @@ int tst_usermsg(void)
   return 0;
 }
 
-
+/*
 int tst_window(void)
 {
   int r;
@@ -709,6 +739,7 @@ int tst_window(void)
 
   return 0;
 }
+*/
 
 int start(int argc, char *argv[])
 {
@@ -724,10 +755,13 @@ int start(int argc, char *argv[])
 //  tst_dsp();
 //  tst_alarm();
 //  tst_args(argc,argv);
-  tst_mouse();
+//  tst_mouse();
 //  tst_usermsg();
 //  tst_window();
 //  display_puts("end tst\n");
+//  tst_shm();
+  tst_shm();
+
   return 456;
 }
 

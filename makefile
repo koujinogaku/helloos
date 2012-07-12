@@ -1,4 +1,4 @@
-TESTEXES=$(TSTNANOX).out tst3.out # tst.out tst2.out testmwin.out testvga.out
+TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out #$(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out $(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
 
 LOADERDIR=core/loader
 KERNELDIR=core/kernel
@@ -8,13 +8,15 @@ LIBDIR=core/library/
 TESTDIR=test
 MICROWINDIR=app/microwindows
 
+
+
+
 STDLIB=$(LIBDIR)/libappl.a
 LOADERS=$(LOADERDIR)/ipl.sys $(LOADERDIR)/setup.sys
 KERNEL=$(KERNELDIR)/kernel.sys
 SERVERS=$(SERVERDIR)/display.out $(SERVERDIR)/keyboard.out $(SERVERDIR)/command.out $(SERVERDIR)/mouse.out
 COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out
 MICROWINLIB=$(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a $(MICROWINDIR)/lib/libmwnanox.a
-TESTS= $(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out $(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
 EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(TESTS)
 
 
@@ -50,7 +52,13 @@ $(COMMANDDIR)/dir.out: $(STDLIB)
 $(COMMANDDIR)/type.out: $(STDLIB)
 	cd $(COMMANDDIR) && make
 
-$(TESTDIR)/tstdemox.out: $(STDLIB) $(MICROWINDIR)/make.touch
+$(TESTDIR)/tstdemox.out: $(STDLIB)
+	cd $(TESTDIR) && make
+
+$(TESTDIR)/tst.out: $(STDLIB)
+	cd $(TESTDIR) && make
+
+$(TESTDIR)/tst2.out: $(STDLIB)
 	cd $(TESTDIR) && make
 
 $(MICROWINDIR)/make.touch: $(STDLIB)

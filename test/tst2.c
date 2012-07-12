@@ -3,7 +3,8 @@
 #include "string.h"
 #include "keyboard.h"
 #include "display.h"
-#include "window.h"
+#include "shm.h"
+//#include "window.h"
 
 void puts(char *str)
 {
@@ -48,7 +49,7 @@ void tst_console(void)
 #define SHRMEMNAME2 2
 #define SHRMEMADDR 0x6000000
 
-void shm_tst(void)
+void tst_shm(void)
 {
   int r;
 
@@ -70,6 +71,36 @@ void shm_tst(void)
   r=syscall_shm_unmap(SHRMEMNAME,SHRMEMADDR);
   display_puts(" shm unmap=");
   long2hex(r,s);
+  display_puts(s);
+  display_puts("\n");
+}
+
+void tst_shm2(void)
+{
+  int r;
+
+  syscall_wait(10);
+
+
+  r=shm_map(SHRMEMNAME,(char*)SHRMEMADDR);
+  display_puts("shm map=");
+  sint2dec(r,s);
+  display_puts(s);
+//  display_puts("\n");
+  if(r<0)
+    return;
+
+  syscall_wait(50);
+  memcpy(s,(void*)SHRMEMADDR,4);
+  s[4]=0;
+  display_puts(" shrstr=");
+  display_puts(s);
+//  display_puts("\n");
+
+  r=shm_unmap(SHRMEMNAME);
+  //r=shm_unmap(0);
+  display_puts(" shm unmap=");
+  sint2dec(r,s);
   display_puts(s);
   display_puts("\n");
 }
@@ -153,7 +184,7 @@ void tst_key(void)
 }
 
 
-
+/*
 int tst_window(void)
 {
   int r;
@@ -231,6 +262,7 @@ int tst_window(void)
 
   return 0;
 }
+*/
 
 int start()
 {
@@ -239,7 +271,9 @@ int start()
 //  tst_console();
 //  tst_que();
 //  tst_key();
-  tst_window();
+//  tst_window();
+//  tst_shm();
+  tst_shm2();
 
   return 456;
 }
