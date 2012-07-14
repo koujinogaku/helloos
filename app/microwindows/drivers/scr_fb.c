@@ -178,7 +178,7 @@ fb_open(PSD psd)
 		psd->addr = (unsigned char *)info.vram; // Physical Address
 	}
 	else {                     // VESA MODE
-		psd->addr = CFG_MEM_VESAWINDOWSTART;    // Virtual  Address
+		psd->addr = (void*)CFG_MEM_VESAWINDOWSTART;    // Virtual  Address
 	}
 
 	if(psd->addr == NULL || psd->addr == (unsigned char *)-1) {

@@ -1,4 +1,4 @@
-TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out #$(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out $(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
+TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out $(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out $(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
 
 LOADERDIR=core/loader
 KERNELDIR=core/kernel
@@ -15,7 +15,7 @@ STDLIB=$(LIBDIR)/libappl.a
 LOADERS=$(LOADERDIR)/ipl.sys $(LOADERDIR)/setup.sys
 KERNEL=$(KERNELDIR)/kernel.sys
 SERVERS=$(SERVERDIR)/display.out $(SERVERDIR)/keyboard.out $(SERVERDIR)/command.out $(SERVERDIR)/mouse.out
-COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out
+COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out $(COMMANDDIR)/free.out
 MICROWINLIB=$(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a $(MICROWINDIR)/lib/libmwnanox.a
 EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(TESTS)
 
@@ -52,14 +52,17 @@ $(COMMANDDIR)/dir.out: $(STDLIB)
 $(COMMANDDIR)/type.out: $(STDLIB)
 	cd $(COMMANDDIR) && make
 
-$(TESTDIR)/tstdemox.out: $(STDLIB)
-	cd $(TESTDIR) && make
+$(COMMANDDIR)/free.out: $(STDLIB)
+	cd $(COMMANDDIR) && make
+
+$(TESTDIR)/tstdemox.out: $(STDLIB) $(MICROWINDIR)/make.touch
+	cd $(TESTDIR) && make tstdemox.out
 
 $(TESTDIR)/tst.out: $(STDLIB)
-	cd $(TESTDIR) && make
+	cd $(TESTDIR) && make tst.out
 
 $(TESTDIR)/tst2.out: $(STDLIB)
-	cd $(TESTDIR) && make
+	cd $(TESTDIR) && make tst2.out
 
 $(MICROWINDIR)/make.touch: $(STDLIB)
 	cd $(MICROWINDIR) && make

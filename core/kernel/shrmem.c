@@ -184,7 +184,7 @@ int shm_map(unsigned int shmid,void *pgd, void *vmem, int type)
   }
   for(vpage=(unsigned int)vmem,i=0; i<shm->pagecnt; i++,vpage+=PAGE_PAGESIZE)
   {
-    r=page_map_vpage(pgd, (void*)vpage, shm->pages[i], type);
+    r=page_map_vpage(pgd, (void*)vpage, (void*)shm->pages[i], type);
     if(r<0) {
       for(i--,vpage+=PAGE_PAGESIZE; i>=0; i--,vpage+=PAGE_PAGESIZE)
         page_unmap_vpage(pgd, (void*)vpage);

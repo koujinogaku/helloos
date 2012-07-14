@@ -1,7 +1,6 @@
 /* Memory Management */
 
 #include "config.h"
-#include "iplinfo.h"
 #include "cpu.h"
 #include "kmemory.h"
 #include "string.h"

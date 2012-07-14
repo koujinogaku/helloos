@@ -12,7 +12,6 @@
 #include "desc.h"
 #include "exception.h"
 #include "page.h"
-#include "iplinfo.h"
 #include "string.h"
 #include "kmemory.h"
 #include "task.h"
@@ -266,17 +265,17 @@ void start(void)
   console_puts("vmode=");
   word2hex(bios_info.vmode,s);
   console_puts(s);
-  console_puts(" depth=");
-  word2hex(bios_info.depth,s);
+  console_puts("h depth=");
+  int2dec(bios_info.depth,s);
   console_puts(s);
   console_puts(" vram=");
   long2hex(bios_info.vram,s);
   console_puts(s);
-  console_puts(" scrnx=");
-  word2hex(bios_info.scrnx,s);
+  console_puts("h scrnx=");
+  int2dec(bios_info.scrnx,s);
   console_puts(s);
   console_puts(" scrny=");
-  word2hex(bios_info.scrny,s);
+  int2dec(bios_info.scrny,s);
   console_puts(s);
 
   console_puts("\n");

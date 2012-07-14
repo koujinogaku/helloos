@@ -14,7 +14,7 @@
 #include "dma.h"
 #include "floppy.h"
 #include "errno.h"
-#include "iplinfo.h"
+#include "../loader/iplinfo.h"
 
 /* FDC registers */
 enum {

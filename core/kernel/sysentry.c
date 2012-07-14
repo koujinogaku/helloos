@@ -16,6 +16,8 @@
 #include "kprogram.h"
 #include "fat.h"
 #include "kernel.h"
+#include "kmemory.h"
+#include "mutex.h"
 
 extern int syscall_entry_intr(void);
 
@@ -180,6 +182,18 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
     break;
   case SYSCALL_FN_ALARM_UNSET:
     eax = syscall_alarm_unset(ebx);
+    break;
+  case SYSCALL_FN_KERNEL_MEMORY_STATUS:
+    eax = syscall_kernel_memory_status((unsigned long *)ebx);
+    break;
+  case SYSCALL_FN_MTX_LOCK:
+    eax = syscall_mtx_lock((int *)ebx);
+    break;
+  case SYSCALL_FN_MTX_TRYLOCK:
+    eax = syscall_mtx_trylock((int *)ebx);
+    break;
+  case SYSCALL_FN_MTX_UNLOCK:
+    eax = syscall_mtx_unlock((int *)ebx);
     break;
 
   default:
@@ -351,4 +365,30 @@ int syscall_alarm_set(unsigned int alarmtime, int queid, int arg)
 int syscall_alarm_unset(int alarmid)
 {
   return alarm_unset(alarmid);
+}
+int syscall_kernel_memory_status(unsigned long *status)
+{
+  if(status) {
+    *status++ = mem_get_totalsize();
+    *status++ = page_get_totalfree()*PAGE_PAGESIZE;
+    *status++ = mem_get_kernelfree();
+  }
+  return 0;
+}
+
+int syscall_mtx_lock(int *mutex)
+{
+  mutex_lock(mutex);
+  return 0;
+}
+
+int syscall_mtx_trylock(int *mutex)
+{
+  return mutex_trylock(mutex);
+}
+
+int syscall_mtx_unlock(int *mutex)
+{
+  mutex_unlock(mutex);
+  return 0;
 }

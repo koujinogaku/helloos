@@ -21,6 +21,9 @@ A000:0000                                                                       
 8000:0000                                                                                                                   -------8000:0000-----
                                                                                                                              Virtual Address:
                                                                                                                               Shared Memory 2GB
+                                                                                                                            -------00C0:0000-----
+                                                                                                                             Virtual Address:
+                                                                                                                              Shared Heap 4MB
 0080:0000                                                                                                                   -------0080:0000-----
                                                                                                                              8MBまで物理メモリに
                                                                                  memman aloc MAXまで                         マッピングして

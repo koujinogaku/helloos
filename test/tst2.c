@@ -4,6 +4,7 @@
 #include "keyboard.h"
 #include "display.h"
 #include "shm.h"
+#include "memory.h"
 //#include "window.h"
 
 void puts(char *str)
@@ -47,7 +48,8 @@ void tst_console(void)
 
 #define SHRMEMNAME 1
 #define SHRMEMNAME2 2
-#define SHRMEMADDR 0x6000000
+#define SHRMEMADDR ((void *)0x6000000)
+#define SHRMEMHEAP ((void *)0x7000000)
 
 void tst_shm(void)
 {
@@ -55,7 +57,7 @@ void tst_shm(void)
 
   syscall_wait(10);
 
-  r=syscall_shm_map(SHRMEMNAME,SHRMEMADDR);
+  r=syscall_shm_map(SHRMEMNAME,(unsigned int)SHRMEMADDR);
   display_puts("shm map=");
   long2hex(r,s);
   display_puts(s);
@@ -68,7 +70,7 @@ void tst_shm(void)
   display_puts(s);
 //  display_puts("\n");
 
-  r=syscall_shm_unmap(SHRMEMNAME,SHRMEMADDR);
+  r=syscall_shm_unmap(SHRMEMNAME,(unsigned int)SHRMEMADDR);
   display_puts(" shm unmap=");
   long2hex(r,s);
   display_puts(s);
@@ -104,6 +106,7 @@ void tst_shm2(void)
   display_puts(s);
   display_puts("\n");
 }
+
 
 #define QUENAME  1
 #define QUENAME2 2
@@ -141,6 +144,51 @@ void tst_que(void)
     if(*c=='\n')
       break;
   }
+}
+
+void tst_mutex(void)
+{
+  int r,r1;
+  char *ctl;
+  int *mutex;
+  char *m1;
+
+  r1=shm_create(SHRMEMNAME,8*1024);
+  display_puts("shm create=");
+  sint2dec(r1,s);
+  display_puts(s);
+
+  r=shm_map(SHRMEMNAME,SHRMEMHEAP);
+  display_puts(" shm map=");
+  sint2dec(r,s);
+  display_puts(s);
+  display_puts("\n");
+
+  mutex = SHRMEMHEAP;
+  ctl = (void*)((unsigned long)SHRMEMHEAP+sizeof(int));
+  if(r1==0) {
+    *mutex=0;
+    syscall_mtx_lock(mutex);
+    memory_init(ctl,8*1024-sizeof(int));
+    display_puts(" init heap\n");
+    syscall_mtx_unlock(mutex);
+  }
+
+  syscall_mtx_lock(mutex);
+  display_puts("lock tst2\n");
+  m1 = memory_alloc(10,ctl);
+  display_puts("alloc tst2\n");
+  syscall_mtx_unlock(mutex);
+  display_puts("unlock tst2\n");
+
+  memcpy(m1,"efgh",5);
+  display_puts("memcpy tst2\n");
+  syscall_wait(1000);
+  display_puts("sleeping tst2\n");
+  display_puts("dump tst2=");
+  display_puts(m1);
+  display_puts("\n");
+
 }
 
 void tst_key(void)
@@ -273,7 +321,8 @@ int start()
 //  tst_key();
 //  tst_window();
 //  tst_shm();
-  tst_shm2();
+//  tst_shm2();
+tst_mutex();
 
   return 456;
 }

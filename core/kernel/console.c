@@ -99,7 +99,7 @@ void console_setup(void *binfo)
     if(console_vmode < 0x100)  // VGA GRAPHICS
       console_scrn   = (void *)(((struct bios_info *)binfo)->vram);  // Physical Address
     else                       // VESA MODE
-      console_scrn = CFG_MEM_VESAWINDOWSTART;                        // Virtual  Address
+      console_scrn = (void*)CFG_MEM_VESAWINDOWSTART;                 // Virtual  Address
     console_size = console_size_x * console_size_y;
     console_pos = 0;
     console_attr = 0x07;

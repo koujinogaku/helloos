@@ -245,10 +245,10 @@ int command_wait(tryflg)
 
 int command_builtin(int argc, char *argv[])
 {
-  if(strncmp(argv[0],"mem", 4)==0) {
-    mem_dumpfree();
-    return 0;
-  }
+  //if(strncmp(argv[0],"mem", 4)==0) {
+  //  memory_dumpfree(0);
+  //  return 0;
+  //}
 
   return ERRNO_NOTEXIST;
 

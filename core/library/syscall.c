@@ -280,3 +280,27 @@ int syscall_alarm_unset(int alarmid)
   SYSCALL_1(SYSCALL_FN_ALARM_UNSET, r, alarmid);
   return r;
 }
+int syscall_kernel_memory_status(unsigned long *status)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_KERNEL_MEMORY_STATUS, r, status);
+  return r;
+}
+int syscall_mtx_lock(int *mutex)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_MTX_LOCK, r, mutex);
+  return r;
+}
+int syscall_mtx_trylock(int *mutex)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_MTX_TRYLOCK, r, mutex);
+  return r;
+}
+int syscall_mtx_unlock(int *mutex)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_MTX_UNLOCK, r, mutex);
+  return r;
+}

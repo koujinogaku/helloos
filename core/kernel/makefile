@@ -3,7 +3,7 @@ LD=$(TS)-ld
 AR=$(TS)-ar
 OBJDUMP=$(TS)-objdump
 CC=$(TS)-gcc
-CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../include -I../loader
+CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../include #-I../loader
 
 TARGET=hello2
 OBJS= kernel.o desc.o console.o string.o kmemory.o task.o pic.o intr.o queue.o alarm.o timer.o dma.o floppy.o fat.o sysentry.o exception.o mutex.o page.o shrmem.o kprogram.o

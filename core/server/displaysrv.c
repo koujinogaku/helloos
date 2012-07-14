@@ -367,7 +367,7 @@ int display_setup(void)
     if(display_vmode  < 0x100)  // VGA GRAPHICS
       display_scrn   = (void *)(binfo.vram);  // Physical Address
     else                       // VESA MODE
-      display_scrn = CFG_MEM_VESAWINDOWSTART; // Virtual  Address
+      display_scrn = (void*)CFG_MEM_VESAWINDOWSTART; // Virtual  Address
 
     display_size = display_size_x * display_size_y;
     display_pos = 0;

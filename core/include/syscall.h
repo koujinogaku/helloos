@@ -46,6 +46,10 @@
 #define SYSCALL_FN_KERNEL_GET_BIOS_INFO 37
 #define SYSCALL_FN_ALARM_SET     38
 #define SYSCALL_FN_ALARM_UNSET   39
+#define SYSCALL_FN_KERNEL_MEMORY_STATUS 40
+#define SYSCALL_FN_MTX_LOCK      41
+#define SYSCALL_FN_MTX_TRYLOCK   42
+#define SYSCALL_FN_MTX_UNLOCK    43
 
 void syscall_init(void);
 
@@ -74,6 +78,10 @@ int syscall_que_lookup(unsigned int quename);
 int syscall_que_peeksize(int queid);
 int syscall_que_trypeeksize(int queid);
 
+int syscall_mtx_lock(int *mutex);
+int syscall_mtx_trylock(int *mutex);
+int syscall_mtx_unlock(int *mutex);
+
 
 #define SYSCALL_PGM_TYPE_IO  0x00000001
 #define SYSCALL_PGM_TYPE_VGA 0x00000002
@@ -95,6 +103,7 @@ int syscall_file_closedir(unsigned long *vdirdesc);
 int syscall_kernel_get_bios_info(char *binfo);
 int syscall_alarm_set(unsigned int alarmtime, int queid, int arg);
 int syscall_alarm_unset(int alarmid);
+int syscall_kernel_memory_status(unsigned long *status);
 
 
 int syscall_intr_regist(int irq, int queid);

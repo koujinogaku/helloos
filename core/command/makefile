@@ -10,7 +10,7 @@ STDLIBDIR=../library
 STARTOBJ=$(STDLIBDIR)/startappl.o
 APPLIB=$(STDLIBDIR)/libappl.a
 
-all: dir.out type.out
+all: dir.out type.out free.out
 
 %.out: %.o
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $< $(APPLIB) -o $@
