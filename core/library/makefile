@@ -6,7 +6,7 @@ CC=$(TS)-gcc
 CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../include
 
 APPLIB=libappl.a
-APPLOBJ= syscall.o shm.o string.o keyboard.o display.o pic.o environm.o memory.o message.o mouse.o qsort.o print.o rand.o dbgmemory.o
+APPLOBJ= syscall.o shm.o string.o keyboard.o display.o pic.o environm.o memory.o message.o mouse.o qsort.o print.o rand.o bucket.o dbgmemory.o
 
 all: $(APPLIB) startappl.o
 

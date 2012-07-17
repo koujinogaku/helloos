@@ -5,6 +5,8 @@
 #include "display.h"
 #include "shm.h"
 #include "memory.h"
+#include "bucket.h"
+#include "environm.h"
 //#include "window.h"
 
 void puts(char *str)
@@ -231,6 +233,59 @@ void tst_key(void)
 
 }
 
+#define BKT_QNM_BUCKET     MSGQUENAMES_WINMGR
+#define BKT_SRV_BUCKET     MSGQUENAMES_WINMGR
+#define BKT_CMD_BLOCK      0x0001
+
+int tst_bucket()
+{
+  BUCKET *dsc;
+  char s[16];
+  int rc;
+  char *buffer;
+  int qid;
+
+  qid = syscall_que_lookup(BKT_QNM_BUCKET);
+  if(qid<0) {
+    display_puts("que_lookup error=");
+    int2dec(-qid,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  rc=bucket_open(&dsc);
+  if(rc<0) {
+    display_puts("open error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  rc=bucket_connect(dsc, qid, BKT_SRV_BUCKET, BKT_CMD_BLOCK);
+  if(rc<0) {
+    display_puts("connect error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+
+  buffer=malloc(4096);
+  memcpy(buffer,"BUCKETTEST",11);
+
+  rc=bucket_send(dsc, buffer, 4096);
+  if(rc<0) {
+    display_puts("send error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  display_puts("done\n");
+
+  return 0;
+}
+
 
 /*
 int tst_window(void)
@@ -322,8 +377,9 @@ int start()
 //  tst_window();
 //  tst_shm();
 //  tst_shm2();
-tst_mutex();
+//  tst_mutex();
+  tst_bucket();
 
-  return 456;
+  return 789;
 }
 

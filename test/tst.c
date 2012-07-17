@@ -8,6 +8,8 @@
 #include "mouse.h"
 #include "message.h"
 #include "shm.h"
+#include "bucket.h"
+#include "environm.h"
 //#include "window.h"
 
 void puts(char *str)
@@ -752,6 +754,99 @@ int tst_usermsg(void)
   return 0;
 }
 
+#define BKT_QNM_BUCKET     MSGQUENAMES_WINMGR
+#define BKT_SRV_BUCKET     MSGQUENAMES_WINMGR
+#define BKT_CMD_BLOCK      0x0001
+
+int tst_bucket()
+{
+  BUCKET *dsc;
+  char s[16];
+  union bucket_msg msg;
+  int queid;
+  int rc;
+  char *buffer;
+
+  queid = environment_getqueid();
+  rc = syscall_que_setname(queid, BKT_QNM_BUCKET);
+  if(rc<0) {
+    display_puts("que_setname error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  rc=bucket_open(&dsc);
+  if(rc<0) {
+    display_puts("open error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  display_puts("receiving...");
+  msg.h.size=sizeof(union bucket_msg);
+  rc=message_receive(0,BKT_SRV_BUCKET, BKT_CMD_BLOCK, &msg);
+  display_puts("\n");
+  if(rc<0) {
+    display_puts("msg recv error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  display_puts("msg size=");
+  int2dec((unsigned long)(msg.h.size),s);
+  display_puts(s);
+  display_puts("\n");
+
+  display_puts("msg service=");
+  word2hex(msg.h.service,s);
+  display_puts(s);
+  display_puts("h\n");
+
+  display_puts("msg command=");
+  word2hex(msg.h.command,s);
+  display_puts(s);
+  display_puts("h\n");
+
+  display_puts("msg command=");
+  word2hex(msg.h.command,s);
+  display_puts(s);
+  display_puts("h\n");
+
+  display_puts("block=");
+  long2hex((unsigned long)(msg.n.block),s);
+  display_puts(s);
+  display_puts("h\n");
+
+  rc=bucket_setmsg(dsc, &msg);
+  if(rc<0) {
+    display_puts("setmsg error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  buffer=malloc(4096);
+  rc=bucket_recv(dsc, buffer, 4096);
+  if(rc<0) {
+    display_puts("setmsg error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+  }
+
+  display_puts("received bucket:");
+  int2dec(rc,s);
+  display_puts(s);
+  display_puts("byte.(");
+  display_puts(buffer);
+  display_puts(")\n");
+
+  return 0;
+}
+
 /*
 int tst_window(void)
 {
@@ -871,7 +966,8 @@ int start(int argc, char *argv[])
 //  display_puts("end tst\n");
 //  tst_shm();
 //  tst_shm2();
-tst_mutex();
+//  tst_mutex();
+  tst_bucket();
 
   return 456;
 }
