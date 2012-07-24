@@ -239,49 +239,97 @@ void tst_key(void)
 
 int tst_bucket()
 {
-  BUCKET *dsc;
+  int fd;
   char s[16];
   int rc;
   char *buffer;
-  int qid;
+  int j;
 
-  qid = syscall_que_lookup(BKT_QNM_BUCKET);
-  if(qid<0) {
-    display_puts("que_lookup error=");
-    int2dec(-qid,s);
-    display_puts(s);
-    display_puts("\n");
-  }
-
-  rc=bucket_open(&dsc);
+  rc=fd=bucket_open();
   if(rc<0) {
     display_puts("open error=");
     int2dec(-rc,s);
     display_puts(s);
     display_puts("\n");
+    return 1;
   }
 
-  rc=bucket_connect(dsc, qid, BKT_SRV_BUCKET, BKT_CMD_BLOCK);
+  rc=bucket_connect(fd, BKT_QNM_BUCKET, BKT_SRV_BUCKET);
   if(rc<0) {
     display_puts("connect error=");
     int2dec(-rc,s);
     display_puts(s);
     display_puts("\n");
+    return 1;
   }
 
 
   buffer=malloc(4096);
-  memcpy(buffer,"BUCKETTEST",11);
-
-  rc=bucket_send(dsc, buffer, 4096);
+  memcpy(buffer,"ABC",3);
+  rc=bucket_send(fd, buffer, 3);
   if(rc<0) {
     display_puts("send error=");
     int2dec(-rc,s);
     display_puts(s);
     display_puts("\n");
+    return 1;
+  }
+  memcpy(buffer,"DEF",3);
+  rc=bucket_send(fd, buffer, 3);
+  if(rc<0) {
+    display_puts("send error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+    return 1;
   }
 
-  display_puts("done\n");
+  rc=bucket_shutdown(fd);
+  if(rc<0) {
+    display_puts("shutdown error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+    return 1;
+  }
+
+  j=0;
+  while(j<5) {
+    display_puts("receiving(client)...");
+    rc=bucket_select();
+    if(rc<0) {
+      display_puts("select error=");
+      int2dec(-rc,s);
+      display_puts(s);
+      display_puts("\n");
+      return 1;
+    }
+    display_puts("\n");
+
+    rc=bucket_recv(fd, buffer, 6);
+    if(rc<0) {
+      display_puts("recv error=");
+      int2dec(-rc,s);
+      display_puts(s);
+      display_puts("\n");
+      return 1;
+    }
+    display_puts("received(client) bucket:");
+    int2dec(rc,s);
+    display_puts(s);
+    display_puts("byte.(");
+    buffer[rc]=0;
+    display_puts(buffer);
+    display_puts(")\n");
+
+    if(rc==0)
+      break;
+
+syscall_wait(100);
+    j++;
+  }
+
+  display_puts("done(client)\n");
 
   return 0;
 }

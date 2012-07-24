@@ -10,6 +10,7 @@
 #include "environm.h"
 #include "display.h"
 
+#define min(a, b)       (a) < (b) ? a : b
 
 static struct msg_list msg_listhead;
 //static char msg_status=0;
@@ -91,7 +92,7 @@ static inline int message_match(unsigned short srv, unsigned short cmd, struct m
   return 1;
 }
 
-int message_poll(int srv, int cmd, void *vmsgret)
+int message_poll(int tryflg, int srv, int cmd, void *vmsgret)
 {
   struct msg_list *msgctl;
   struct msg_head *msg;
@@ -106,12 +107,18 @@ int message_poll(int srv, int cmd, void *vmsgret)
 
   list_for_each(&msg_listhead, msgctl) {
     if(message_match(srv,cmd,msgctl->msg)) {
+      msg=vmsgret;
+      memcpy(msg,msgctl->msg,min(msgctl->msg->size,msg->size));
       return 1;
     }
   }
 
   for(;;) {
-    msgsize=syscall_que_trypeeksize(msg_myqueid);
+    if(tryflg==MESSAGE_MODE_WAIT)
+      msgsize=syscall_que_peeksize(msg_myqueid);
+    else
+      msgsize=syscall_que_trypeeksize(msg_myqueid);
+
     if(msgsize==ERRNO_OVER) {
       return 0;
     }
@@ -134,6 +141,8 @@ int message_poll(int srv, int cmd, void *vmsgret)
     msgctl->msg=msg;
     list_add_tail(&msg_listhead,msgctl);
     if(message_match(srv,cmd,msg)) {
+      msg=vmsgret;
+      memcpy(msg,msgctl->msg,min(msgctl->msg->size,msg->size));
       return 1;
     }
   }

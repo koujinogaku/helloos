@@ -1,33 +1,19 @@
 #ifndef BUCKET_H
 #define BUCKET_H
-#include "kmessage.h"
 
-union bucket_msg {
-  struct msg_head h;
-  struct bucket_msg_n {
-    struct msg_head h;
-    void *block;
-    unsigned int size;
-  } n;
-};
+#define BUCKET_SELECT_DATA 1
+#define BUCKET_SELECT_MSG  2
 
-struct bucket_dsc {
-  int src_qid;
-  int dst_qid;
-  int dst_svc;
-  int dst_cmd;
-  union bucket_msg last_msg;
-  int pos;
-  int have_block;
-};
-
-typedef struct bucket_dsc BUCKET;
-
-int bucket_open(BUCKET **dsc);
-int bucket_bind(BUCKET *dsc, int src_qid);
-int bucket_connect(BUCKET *dsc, int dst_qid,int service,int command);
-int bucket_send(BUCKET *dsc, void *buffer, int size);
-int bucket_setmsg(BUCKET *dsc, void *msg_v);
-int bucket_recv(BUCKET *dsc, void *buffer, int size);
+int bucket_open(void);
+int bucket_bind(int dsc, int que_name, int service);
+int bucket_connect(int dsc, int que_name, int service);
+int bucket_accept(int dsc);
+int bucket_select(void);
+void *bucket_selected_msg(void);
+int bucket_isset(int dsc);
+int bucket_send(int dsc, void *buffer, int size);
+int bucket_recv(int dsc, void *buffer, int size);
+int bucket_shutdown(int dsc);
+int bucket_close(int dsc);
 
 #endif

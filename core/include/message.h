@@ -18,7 +18,7 @@ struct msg_list {
 int message_init(void);
 int message_send(int queid, void *msg);
 int message_receive(int tryflg, int srv, int cmd, void *msgret);
-int message_poll(int srv, int cmd, void *vmsgret);
+int message_poll(int tryflg, int srv, int cmd, void *vmsgret);
 
 struct msg_list *message_create_userqueue(void);
 int message_put_userqueue(struct msg_list *head, void *vmsg);

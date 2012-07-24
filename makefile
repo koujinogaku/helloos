@@ -1,4 +1,4 @@
-TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out $(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out $(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
+TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out #$(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out $(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
 
 LOADERDIR=core/loader
 KERNELDIR=core/kernel

@@ -22,7 +22,7 @@ TSTNANOX= tstnanox.o
 TSTMOUSE= tstmouse.o
 TSTDEMOX= tstdemox.o
 
-all: tst.out tst2.out tstdemox.out #tstnanox.out tstmouse.out testmwin.out 
+all: tst.out tst2.out #tstdemox.out #tstnanox.out tstmouse.out testmwin.out 
 
 tst.out: $(TST) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TST) $(APPLIB) -o $@

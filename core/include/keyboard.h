@@ -63,8 +63,9 @@ enum {
 
 int keyboard_init(void);
 int keyboard_getcode(void);
-int keyboard_request_key(union kbd_msg *msg);
-int keyboard_decode_key(union kbd_msg *msg);
+int keyboard_request_key(void);
+int keyboard_decode_key(void *msg_v);
 int keyboard_poll(void);
+int keyboard_setmsg(void *msg_v);
 
 #endif

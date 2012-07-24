@@ -25,8 +25,9 @@ union mou_msg {
 
 int mouse_init(void);
 int mouse_getcode(int *button, int *dx, int *dy);
-int mouse_decode_code(union mou_msg *msg, int *button, int *dx, int *dy);
-int mouse_request_code(union mou_msg *msg);
+int mouse_decode_code(void *msg_v, int *button, int *dx, int *dy);
+int mouse_request_code(void);
 int mouse_poll(void);
+int mouse_setmsg(void *msg_v);
 
 #endif

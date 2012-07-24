@@ -756,93 +756,115 @@ int tst_usermsg(void)
 
 #define BKT_QNM_BUCKET     MSGQUENAMES_WINMGR
 #define BKT_SRV_BUCKET     MSGQUENAMES_WINMGR
-#define BKT_CMD_BLOCK      0x0001
 
 int tst_bucket()
 {
-  BUCKET *dsc;
+  int fd,cli;
   char s[16];
-  union bucket_msg msg;
-  int queid;
   int rc;
   char *buffer;
+  int j;
 
-  queid = environment_getqueid();
-  rc = syscall_que_setname(queid, BKT_QNM_BUCKET);
-  if(rc<0) {
-    display_puts("que_setname error=");
-    int2dec(-rc,s);
-    display_puts(s);
-    display_puts("\n");
-  }
-
-  rc=bucket_open(&dsc);
+  rc=fd=bucket_open();
   if(rc<0) {
     display_puts("open error=");
     int2dec(-rc,s);
     display_puts(s);
     display_puts("\n");
+    return 1;
   }
 
-  display_puts("receiving...");
-  msg.h.size=sizeof(union bucket_msg);
-  rc=message_receive(0,BKT_SRV_BUCKET, BKT_CMD_BLOCK, &msg);
-  display_puts("\n");
+
+  rc=bucket_bind(fd, BKT_QNM_BUCKET, BKT_SRV_BUCKET);
   if(rc<0) {
-    display_puts("msg recv error=");
+    display_puts("bind error=");
     int2dec(-rc,s);
     display_puts(s);
     display_puts("\n");
+    return 1;
   }
 
-  display_puts("msg size=");
-  int2dec((unsigned long)(msg.h.size),s);
-  display_puts(s);
-  display_puts("\n");
-
-  display_puts("msg service=");
-  word2hex(msg.h.service,s);
-  display_puts(s);
-  display_puts("h\n");
-
-  display_puts("msg command=");
-  word2hex(msg.h.command,s);
-  display_puts(s);
-  display_puts("h\n");
-
-  display_puts("msg command=");
-  word2hex(msg.h.command,s);
-  display_puts(s);
-  display_puts("h\n");
-
-  display_puts("block=");
-  long2hex((unsigned long)(msg.n.block),s);
-  display_puts(s);
-  display_puts("h\n");
-
-  rc=bucket_setmsg(dsc, &msg);
+  display_puts("wait accepting in select...");
+  rc=bucket_select();
   if(rc<0) {
-    display_puts("setmsg error=");
+    display_puts("select error=");
     int2dec(-rc,s);
     display_puts(s);
     display_puts("\n");
+    return 1;
   }
+  display_puts("selected type=");
+  int2dec(rc,s);
+  display_puts(s);
+  display_puts("\n");
+
+  rc=cli=bucket_accept(fd);
+  if(rc<0) {
+    display_puts("accept error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+    return 1;
+  }
+  display_puts("\n");
+
 
   buffer=malloc(4096);
-  rc=bucket_recv(dsc, buffer, 4096);
-  if(rc<0) {
-    display_puts("setmsg error=");
-    int2dec(-rc,s);
-    display_puts(s);
+  j=0;
+  while(j<5) {
+    display_puts("receiving(server)...");
+    rc=bucket_select();
+    if(rc<0) {
+      display_puts("select error=");
+      int2dec(-rc,s);
+      display_puts(s);
+      display_puts("\n");
+      return 1;
+    }
     display_puts("\n");
+
+    rc=bucket_recv(cli, buffer, 2);
+    if(rc<0) {
+      display_puts("recv error=");
+      int2dec(-rc,s);
+      display_puts(s);
+      display_puts("\n");
+      return 1;
+    }
+    display_puts("received(server) bucket:");
+    int2dec(rc,s);
+    display_puts(s);
+    display_puts("byte.(");
+    buffer[rc]=0;
+    display_puts(buffer);
+    display_puts(")\n");
+
+    if(rc==0)
+      break;
+
+syscall_wait(100);
+    j++;
   }
 
-  display_puts("received bucket:");
+  memcpy(buffer,"HELLO",6);
+  rc=bucket_send(cli, buffer, 6);
+  display_puts("send bucket:");
   int2dec(rc,s);
   display_puts(s);
   display_puts("byte.(");
   display_puts(buffer);
   display_puts(")\n");
+
+  rc=bucket_close(cli);
+  if(rc<0) {
+    display_puts("shutdown error=");
+    int2dec(-rc,s);
+    display_puts(s);
+    display_puts("\n");
+    return 1;
+  }
+
+  display_puts("done(server)\n");
 
   return 0;
 }
