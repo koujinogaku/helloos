@@ -323,7 +323,10 @@ int bucket_select(void)
     }
   }
 
-  return BUCKET_SELECT_MSG;
+  if(selected)
+    return BUCKET_SELECT_DATA;
+  else
+    return BUCKET_SELECT_MSG;
 }
 
 void *bucket_selected_msg(void)
@@ -334,9 +337,9 @@ void *bucket_selected_msg(void)
 int bucket_isset(int dsc)
 {
   if(dsc<=0 || dsc>=BUCKET_MAXDSC)
-    return ERRNO_NOTEXIST;
+    return 0;
   if(dsctbl[dsc]==0)
-    return ERRNO_NOTEXIST;
+    return 0;
 
   return dsctbl[dsc]->have_block;
 }
@@ -395,10 +398,10 @@ int bucket_recv(int dsc, void *buffer, int size)
 
   if(!(dsctbl[dsc]->have_block)) {
     bucketmsg.h.size=sizeof(union bucket_msg);
-    rc=message_receive(MESSAGE_MODE_TRY, dsctbl[dsc]->service, dsctbl[dsc]->dst_qid, &bucketmsg);
-    if(rc==ERRNO_OVER) {
-      return 0;
-    }
+    rc=message_receive(MESSAGE_MODE_WAIT, dsctbl[dsc]->service, dsctbl[dsc]->dst_qid, &bucketmsg);
+    //if(rc==ERRNO_OVER) {
+    //  return 0;
+    //}
     if(rc<0)
       return rc;
     memcpy(&(dsctbl[dsc]->last_msg),&bucketmsg,sizeof(union bucket_msg));

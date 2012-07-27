@@ -811,7 +811,7 @@ int tst_bucket()
 
   buffer=malloc(4096);
   j=0;
-  while(j<5) {
+
     display_puts("receiving(server)...");
     rc=bucket_select();
     if(rc<0) {
@@ -823,6 +823,7 @@ int tst_bucket()
     }
     display_puts("\n");
 
+  while(j<5) {
     rc=bucket_recv(cli, buffer, 2);
     if(rc<0) {
       display_puts("recv error=");
@@ -842,7 +843,7 @@ int tst_bucket()
     if(rc==0)
       break;
 
-syscall_wait(100);
+//syscall_wait(100);
     j++;
   }
 

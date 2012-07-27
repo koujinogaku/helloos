@@ -284,14 +284,14 @@ int tst_bucket()
     return 1;
   }
 
-  rc=bucket_shutdown(fd);
-  if(rc<0) {
-    display_puts("shutdown error=");
-    int2dec(-rc,s);
-    display_puts(s);
-    display_puts("\n");
-    return 1;
-  }
+//  rc=bucket_shutdown(fd);
+//  if(rc<0) {
+//    display_puts("shutdown error=");
+//    int2dec(-rc,s);
+//    display_puts(s);
+//    display_puts("\n");
+//    return 1;
+//  }
 
   j=0;
   while(j<5) {
