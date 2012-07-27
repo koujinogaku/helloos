@@ -22,12 +22,18 @@ union mou_msg {
   } res;
 };
 
+#ifndef TRUE
+#define TRUE (1)
+#endif
+#ifndef FALSE
+#define FALSE (0)
+#endif
 
 int mouse_init(void);
 int mouse_getcode(int *button, int *dx, int *dy);
 int mouse_decode_code(void *msg_v, int *button, int *dx, int *dy);
-int mouse_request_code(void);
+int mouse_request_code(int mode);
 int mouse_poll(void);
-int mouse_setmsg(void *msg_v);
+int mouse_set_wait(int mode);
 
 #endif

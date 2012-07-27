@@ -8,11 +8,16 @@ int tst_mouse(void)
 {
   int button,dx,dy;
   int r;
+  int carry;
 
   r=mouse_init();
   if(r<0)
     return 255;
+  r=mouse_request_code(TRUE);
+  if(r<0)
+    return 255;
 
+  mouse_set_wait(TRUE);
   for(;;) {
     r=mouse_getcode(&button, &dx, &dy);
     if(r<0) {
@@ -21,6 +26,10 @@ int tst_mouse(void)
       display_puts(s);
       display_puts("\n");
       return -1;
+    }
+    if(r==0) {
+      display_puts("--");
+      continue;
     }
 /*
     display_puts("[");
@@ -34,6 +43,10 @@ int tst_mouse(void)
     display_puts(s);
     display_puts("]");
 */
+    carry = button & 0xcc;
+    byte2hex(carry,s);
+    display_puts(s);
+
     display_puts("[");
     byte2hex(button,s);
     display_puts(s);
@@ -45,13 +58,23 @@ int tst_mouse(void)
     display_puts(s);
     display_puts("]");
 
-
     if(button & 0x1)
       display_puts("L");
     else
       display_puts(".");
+
     if(button & 0x2)
       display_puts("R");
+    else
+      display_puts(".");
+
+    if(button & 0x10)
+      display_puts("L");
+    else
+      display_puts(".");
+
+    if(button & 0x20)
+      display_puts("D");
     else
       display_puts(".");
 

@@ -9,8 +9,7 @@
 static unsigned short mou_queid=0;
 static unsigned short mou_clientq=0;
 static unsigned char  mou_requested=0;
-static unsigned char  mou_received=0;
-static union mou_msg  mou_received_message;
+static int mou_quewait=MESSAGE_MODE_TRY;
 
 static char s[10];
 
@@ -54,7 +53,7 @@ int mouse_init(void)
   return 0;
 }
 
-int mouse_request_code(void)
+int mouse_request_code(int mode)
 {
   union mou_msg msg;
   int r;
@@ -72,7 +71,11 @@ int mouse_request_code(void)
   msg.req.h.size=sizeof(union mou_msg);
   msg.req.h.service=MOU_SRV_MOUSE;
   msg.req.h.command=MOU_CMD_GETCODE;
-  msg.req.queid=mou_clientq;
+  if(mode)
+    msg.req.queid=mou_clientq;
+  else
+    msg.req.queid=0;
+
 /*
 int2dec(msg.req.queid,s);
 display_puts(s);
@@ -98,14 +101,6 @@ int mouse_decode_code(void *msg_v, int *button, int *dx, int *dy)
   *dx=msg->res.dx;
   *dy=msg->res.dy;
 
-  mou_requested=0;
-  return 0;
-}
-
-int mouse_setmsg(void *msg_v)
-{
-  mou_received=1;
-  memcpy(&mou_received_message, msg_v, sizeof(mou_received_message));
   return 0;
 }
 
@@ -114,18 +109,10 @@ int mouse_getcode(int *button, int *dx, int *dy)
   union mou_msg msg;
   int r;
 
-  if(mou_received) {
-    mou_received=0;
-    return mouse_decode_code(&mou_received_message, button, dx, dy);
-  }
-
-  r=mouse_request_code();
-  if(r<0)
-    return r;
-
   msg.req.h.size=sizeof(msg);
-  r=message_receive(0,MOU_SRV_MOUSE, MOU_CMD_GETCODE, &msg);
-  mou_requested=0;
+  r=message_receive(mou_quewait,MOU_SRV_MOUSE, MOU_CMD_GETCODE, &msg);
+  if(r==ERRNO_OVER)
+    return 0;
   if(r<0) {
     display_puts("getcode getresp=");
     int2dec(-r,s);
@@ -134,7 +121,8 @@ int mouse_getcode(int *button, int *dx, int *dy)
     return r;
   }
 
-  return mouse_decode_code(&msg, button, dx, dy);
+  mouse_decode_code(&msg, button, dx, dy);
+  return 1;
 }
 
 int mouse_poll(void)
@@ -142,16 +130,8 @@ int mouse_poll(void)
   union mou_msg msg;
   int r;
 
-  if(mou_received) {
-    return 0;
-  }
-
-  r=mouse_request_code();
-  if(r<0)
-    return r;
-
   msg.req.h.size=sizeof(msg);
-  r=message_poll(MESSAGE_MODE_TRY,MOU_SRV_MOUSE, MOU_CMD_GETCODE, &msg);
+  r=message_poll(mou_quewait,MOU_SRV_MOUSE, MOU_CMD_GETCODE, &msg);
   if(r<0) {
     display_puts("mousepoll getresp=");
     int2dec(-r,s);
@@ -161,4 +141,17 @@ int mouse_poll(void)
   }
 
   return r;
+}
+
+int mouse_set_wait(int mode)
+{
+  int oldmode;
+
+  oldmode=mou_quewait;
+  if(mode)
+    mou_quewait=MESSAGE_MODE_WAIT;
+  else
+    mou_quewait=MESSAGE_MODE_TRY;
+
+  return oldmode;
 }

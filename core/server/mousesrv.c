@@ -30,9 +30,9 @@ static int mou_port_overflow=0;
 
 
 static int mou_queid=0;
+static int mou_has_request=0;
 static struct msg_list *mou_bufferq=NULL;
 static struct msg_list *mou_requestq=NULL;
-static int mou_has_request=0;
 static char s[16];
 
 static int mouse_wait_writeReady(void)
@@ -305,31 +305,15 @@ int mouse_intr(union mou_msg *msg)
   }
 
 
-  code.res.h.arg = button;
-  code.res.dx = dx;
-  code.res.dy = dy;
-
-/*
-display_puts("[");
-word2hex(button,s);
-display_puts(s);
-display_puts(",");
-word2hex(dx,s);
-display_puts(s);
-display_puts(",");
-word2hex(dy,s);
-display_puts(s);
-display_puts("]");
-*/
-
-//display_putc(key);
-
-  if(1) {
+  if(mou_has_request) {
     code.res.h.size=sizeof(code);
     code.res.h.service=MOU_SRV_MOUSE;
     code.res.h.command=MOU_CMD_GETCODE;
-    r=message_put_userqueue(mou_bufferq, &code);
-    if(r<0) {
+    code.res.h.arg = button;
+    code.res.dx = dx;
+    code.res.dy = dy;
+    r=message_send(mou_has_request, &code);
+    if(r<0 && r!=ERRNO_OVER) {
       display_puts("mou_intr=");
       int2dec(-r,s);
       display_puts(s);
@@ -338,100 +322,17 @@ display_puts("]");
     }
   }
 
-
-/*
-{
-  static char intcnt=0;
-  byte2hex(intcnt,s);
-  byte2hex(data,&s[2]);
-  intcnt++;
-  syscall_dbg_locputs(75,2,s);
-}
-*/
   return 0;
 }
 
 int mouse_cmd_getcode(union mou_msg *msg)
 {
-  int r;
+  mou_has_request=msg->req.queid;
 
-  if(mou_has_request==0) {
-/*
-display_puts("setfirst");
-int2dec(msg->req.queid,s);
-display_puts(s);
-*/
-    mou_has_request=msg->req.queid;
-  }
-  else {
-    r=message_put_userqueue(mou_requestq, msg);
-    if(r<0) {
-      display_puts("getcode putreq=");
-      int2dec(-r,s);
-      display_puts(s);
-      display_puts("\n");
-      return r;
-    }
-  }
   return 0;
 }
 
 
-int mouse_response(void)
-{
-  int r;
-  union mou_msg msg;
-
-  if(mou_has_request==0)
-    return 0;
-/*
-display_puts("resin");
-*/
-  for(;;) {
-    msg.res.h.size=sizeof(msg);
-    r=message_get_userqueue(mou_bufferq, &msg);
-    if(r==ERRNO_OVER)
-      return 0;
-    if(r<0) {
-      display_puts("resp getkey=");
-      int2dec(-r,s);
-      display_puts(s);
-      display_puts("\n");
-      return r;
-    }
-/*
-display_puts("snd=");
-word2hex(msg.res.h.cmd,s);
-display_puts(s);
-*/
-    r=syscall_que_put(mou_has_request, &msg);
-    if(r<0) {
-      display_puts("resp sndkey=");
-      int2dec(-r,s);
-      display_puts(s);
-      display_puts(" qid=");
-      int2dec(mou_has_request,s);
-      display_puts(s);
-      display_puts("\n");
-      return r;
-    }
-    msg.req.h.size=sizeof(msg);
-    r=message_get_userqueue(mou_requestq, &msg);
-    if(r==ERRNO_OVER) {
-      mou_has_request=0;
-      return 0;
-    }
-    if(r<0) {
-      display_puts("resp getreq=");
-      int2dec(-r,s);
-      display_puts(s);
-      display_puts("\n");
-      return r;
-    }
-    mou_has_request=msg.req.queid;
-  }
-  return 0;
-}
 int mouse_krn(union mou_msg *cmd)
 {
   int r;
@@ -520,9 +421,6 @@ int start(void)
       r=ERRNO_CTRLBLOCK;
       break;
     }
-//    display_puts("end!");    
-    if(r>=0 && mou_has_request!=0)
-      r=mouse_response();
 
     if(r<0) {
       display_puts("*** keyboard terminate ***\n");
