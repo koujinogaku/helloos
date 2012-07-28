@@ -1,0 +1,3 @@
+mouse &
+nanox &
+tstdemox

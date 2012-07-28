@@ -1,4 +1,4 @@
-TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out #$(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out $(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
+TESTS= $(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out #$(TESTDIR)/tstmouse.out #$(TESTDIR)/tst.out $(TESTDIR)/tst2.out #$(TESTDIR)/testmwin.out
 
 LOADERDIR=core/loader
 KERNELDIR=core/kernel
@@ -17,13 +17,13 @@ KERNEL=$(KERNELDIR)/kernel.sys
 SERVERS=$(SERVERDIR)/display.out $(SERVERDIR)/keyboard.out $(SERVERDIR)/command.out $(SERVERDIR)/mouse.out
 COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out $(COMMANDDIR)/free.out
 MICROWINLIB=$(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a $(MICROWINDIR)/lib/libmwnanox.a
-EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(TESTS)
+EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(MICROWINDIR)/nanox/nanox.out $(TESTS)
 
 
 all: hello.img 
 
-hello.img:  $(EXES) $(LOADERDIR)/fdimage.exe doc/readme.txt # win.bat test.bat
-	$(LOADERDIR)/fdimage hello.img $(EXES) doc/readme.txt # win.bat test.bat
+hello.img:  $(EXES) $(LOADERDIR)/fdimage.exe doc/readme.txt test/win.bat #test.bat
+	$(LOADERDIR)/fdimage hello.img $(EXES) doc/readme.txt test/win.bat #test.bat
 
 $(LIBDIR)/libappl.a:
 	cd $(LIBDIR) && make
@@ -55,8 +55,17 @@ $(COMMANDDIR)/type.out: $(STDLIB)
 $(COMMANDDIR)/free.out: $(STDLIB)
 	cd $(COMMANDDIR) && make
 
+$(MICROWINDIR)/nanox/nanox.out: $(STDLIB)
+	cd $(MICROWINDIR) && make
+
 $(TESTDIR)/tstdemox.out: $(STDLIB) $(MICROWINDIR)/make.touch
 	cd $(TESTDIR) && make tstdemox.out
+
+$(TESTDIR)/tstnanox.out: $(STDLIB) $(MICROWINDIR)/make.touch
+	cd $(TESTDIR) && make tstnanox.out
+
+$(TESTDIR)/tstmouse.out: $(STDLIB)
+	cd $(TESTDIR) && make tstmouse.out
 
 $(TESTDIR)/tst.out: $(STDLIB)
 	cd $(TESTDIR) && make tst.out

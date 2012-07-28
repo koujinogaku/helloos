@@ -13,7 +13,7 @@ LSFILE=../core/library/appl.ls
 STDLIBDIR=../core/library
 STARTOBJ=$(STDLIBDIR)/startappl.o
 APPLIB=$(STDLIBDIR)/libappl.a
-MICROWINLIB=$(MICROWINDIR)/lib/libmwnanox.a $(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a
+MICROWINLIB=$(MICROWINDIR)/lib/libmwnanox.a # $(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a
 
 TST  =tst.o
 TST2 =tst2.o
@@ -22,7 +22,7 @@ TSTNANOX= tstnanox.o
 TSTMOUSE= tstmouse.o
 TSTDEMOX= tstdemox.o
 
-all: tst.out tst2.out #tstdemox.out #tstnanox.out tstmouse.out testmwin.out 
+all: tstdemox.out #tstnanox.out #tst.out tst2.out #tstmouse.out testmwin.out 
 
 tst.out: $(TST) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TST) $(APPLIB) -o $@

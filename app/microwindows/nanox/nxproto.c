@@ -5,6 +5,8 @@
  */ 
 #include "portunixstd.h"
 #include "memory.h"
+#include "bucket.h"
+
 #include "serv.h"
 #include "nxproto.h"
 #include "lock.h"
@@ -84,10 +86,16 @@ nxWriteSocket(char *buf, int todo)
         ACCESS_PER_THREAD_DATA();
 
 	do {
+#if HELLOOS
+		written = bucket_send(nxSocket, buf, todo);
+#else
 		written = write(nxSocket, buf, todo);
+#endif
 		if ( written < 0 ) {
+#if !HELLOOS
 			if ( errno == EAGAIN || errno == EINTR )
 				continue;
+#endif
 			EPRINTF("nxFlushReq: write failed: %m\n");
 			exit(1);
 		}
@@ -112,7 +120,7 @@ nxFlushReq(long newsize, int reply_needed)
 
 	/* flush buffer if required*/
 	if(reqbuf.bufptr > reqbuf.buffer) {
-		char *	buf = reqbuf.buffer;
+		char *	buf = (char*)reqbuf.buffer;
 		int	todo = reqbuf.bufptr - reqbuf.buffer;
 
 #if HAVE_SHAREDMEM_SUPPORT
@@ -156,8 +164,13 @@ nxFlushReq(long newsize, int reply_needed)
 			nxWriteSocket((char *)&req,sizeof(req));
 
 			if ( reply_needed )
+#if HELLOOS
+				while ( bucket_recv(nxSocket, &c, 1) != 1 )
+					;
+#else
 				while ( read(nxSocket, &c, 1) != 1 )
 					;
+#endif
 
 			reqbuf.bufptr = reqbuf.buffer;
 

@@ -10,6 +10,12 @@
 #define MWINCLUDECOLORS		1
 #include "portunixstd.h"
 #include "memory.h"
+#include "bucket.h"
+#include "message.h"
+#include "print.h"
+#include "mouse.h"
+#include "keyboard.h"
+
 #include "serv.h"
 #include "mwtypes.h"
 
@@ -87,7 +93,7 @@ int		un_sock=0;		/* the server socket descriptor */
 static void
 usage(void)
 {
-	printf("Usage: %s [-e] [-p] [-A] [-NLRD] [-x#] [-y#] [-c <fontconfig-file> ...]\n",
+	print_format("Usage: %s [-e] [-p] [-A] [-NLRD] [-x#] [-y#] [-c <fontconfig-file> ...]\n",
 		progname);
 	exit(1);
 }
@@ -97,7 +103,11 @@ usage(void)
  * the clients, and shuts the server down when there are no more clients.
  */
 int
+#if HELLOOS
+start(int argc, char *argv[])
+#else
 main(int argc, char *argv[])
+#endif
 {
 	int t;
 
@@ -105,49 +115,49 @@ main(int argc, char *argv[])
 
 	t = 1;
 	while ( t < argc ) {
-		if ( !strcmp("-e",argv[t])) {
+		if ( !strncmp("-e",argv[t],3)) {
 			escape_quits = FALSE;
 			++t;
 			continue;
 		}
-		if ( !strcmp("-p",argv[t]) ) {
+		if ( !strncmp("-p",argv[t],3) ) {
 			persistent_mode = TRUE;
 			++t;
 			continue;
 		}
-		if ( !strcmp("-A",argv[t]) ) {
+		if ( !strncmp("-A",argv[t],3) ) {
 			autoportrait = TRUE;
 			++t;
 			continue;
 		}
-		if ( !strcmp("-N",argv[t]) ) {
+		if ( !strncmp("-N",argv[t],3) ) {
 			portraitmode = MWPORTRAIT_NONE;
 			++t;
 			continue;
 		}
-		if ( !strcmp("-L",argv[t]) ) {
+		if ( !strncmp("-L",argv[t],3) ) {
 			portraitmode = MWPORTRAIT_LEFT;
 			++t;
 			continue;
 		}
-		if ( !strcmp("-R",argv[t]) ) {
+		if ( !strncmp("-R",argv[t],3) ) {
 			portraitmode = MWPORTRAIT_RIGHT;
 			++t;
 			continue;
 		}
-		if ( !strcmp("-D",argv[t]) ) {
+		if ( !strncmp("-D",argv[t],3) ) {
 			portraitmode = MWPORTRAIT_DOWN;
 			++t;
 			continue;
 		}
-		if ( !strcmp("-x",argv[t]) ) {
+		if ( !strncmp("-x",argv[t],3) ) {
 			if (++t >= argc)
 				usage();
 			nxres = atoi(argv[t]);
 			++t;
 			continue;
 		}
-		if ( !strcmp("-y",argv[t]) ) {
+		if ( !strncmp("-y",argv[t],3) ) {
 			if (++t >= argc)
 				usage();
 			nyres = atoi(argv[t]);
@@ -155,7 +165,7 @@ main(int argc, char *argv[])
 			continue;
 		}
 #if FONTMAPPER
-		if ( !strcmp("-c",argv[t]) ) {
+		if ( !strncmp("-c",argv[t],3) ) {
 			int read_configfile(char *file);
 
 			if (++t >= argc)
@@ -184,7 +194,7 @@ GsAcceptClientFd(int i)
 	GR_CLIENT *client, *cl;
 
 	if(!(client = malloc(sizeof(GR_CLIENT)))) {
-#if !NONETWORK
+#if NONETWORK && UNIX
 		close(i);
 #endif
 		return;
@@ -268,7 +278,7 @@ GsDropClient(int fd)
 }
 #endif
 
-#if UNIX | DOS_DJGPP
+#if UNIX
 #if NONETWORK && defined(HAVESELECT)
 /*
  * Register the specified file descriptor to return an event
@@ -312,7 +322,7 @@ GrUnregisterInput(int fd)
 }
 
 #endif /* NONETWORK && HAVESELECT */
-#endif /* UNIX | DOS_DJGPP*/
+#endif /* UNIX */
 
 /*
  * This function suspends execution of the program for the specified
@@ -355,94 +365,7 @@ GrReqShmCmds(long shmsize)
 #endif
 
 
-#if VXWORKS
-
-#define POLLTIME	100   /* polling sleep interval (in msec) */
-#define MAX_MOUSEEVENTS	10    /* max number of mouse event to get in 1 select */
-#define MAX_KEYBDEVENTS	10    /* max number of mouse event to get in 1 select */
-
-extern void GdSleep(int dwMilliseconds);
-
-void 
-GsSelect(GR_TIMEOUT timeout)
-{
-	int mouseevents = 0;
-	int keybdevents = 0;
-	GR_TIMEOUT waittime = 0;
-	GR_EVENT_GENERAL *gp;
-
-
-	/* input gathering loop */
-	while (1)
-	{
-
-		/* perform pre-select duties, if any */
-		if(scrdev.PreSelect)
-		{
-			scrdev.PreSelect(&scrdev);
-		}
-
-
-		/* If mouse data present, service it */
-		while (mousedev.Poll() > 0)
-		{
-			GsCheckMouseEvent();
-			if (mouseevents++ > MAX_MOUSEEVENTS)
-			{
-				/* don't handle too many events at one shot */
-				break;
-			}
-		}
-
-
-		/* If keyboard data present, service it */
-		while (kbddev.Poll() > 0)
-		{
-			GsCheckKeyboardEvent();
-			if (keybdevents++ > MAX_KEYBDEVENTS)
-			{
-				/* don't handle too many events at one shot */
-				break;
-			}
-		}
-
-		
-		/* did we process any input yet? */
-		if ((mouseevents > 0) || (keybdevents > 0))
-		{
-			/* yep -- return without sleeping */
-			return;
-		}
-
-
-		/* give up time-slice & sleep for a bit */
-		GdSleep(POLLTIME);
-		waittime += POLLTIME; 
-
-
-		/* have we timed out? */
-		if (waittime >= timeout)
-		{
-			/* special case: polling when timeout == 0 -- don't send timeout event */
-			if (timeout != 0)
-			{
-				/* Timeout has occured.  
-				** Currently return a timeout event regardless of whether client 
-				**   has selected for it.
-				*/
-				if ((gp = (GR_EVENT_GENERAL *)GsAllocEvent(curclient)) != NULL)
-				{
-					gp->type = GR_EVENT_TYPE_TIMEOUT;
-				}
-			}
-			return;
-		}
-	}
-
-}
-
-
-#elif MSDOS | _MINIX 
+#if MSDOS | _MINIX 
 
 void
 GsSelect(GR_TIMEOUT timeout)
@@ -751,56 +674,9 @@ GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 
 #endif /* UNIX && defined(HAVESELECT)*/
 
-#if RTEMS
-extern struct MW_UID_MESSAGE m_kbd;
-extern struct MW_UID_MESSAGE m_mou;
-
-void
-GsSelect (GR_TIMEOUT timeout)
-{
-        struct MW_UID_MESSAGE m;
-	int rc;
-
-	/* perform pre-select duties, if any*/
-	if (scrdev.PreSelect)
-		scrdev.PreSelect (&scrdev);
-
-	/* let's make sure that the type is invalid */
-	m.type = MV_UID_INVALID;
-
-	/* wait up for events */
-	rc = uid_read_message (&m, timeout);
-
-	/* return if timed-out or something went wrong */
-	if (rc < 0) {
-	        if (errno != ETIMEDOUT)
-		        EPRINTF (" rc= %d, errno=%d\n", rc, errno);
-		else {
-		        /* timeout handling */
-		}
-		return;
-	}
-
-	/* let's pass the event up to Microwindows */
-	switch (m.type) {
-	case MV_UID_REL_POS:	/* Mouse or Touch Screen event */
-	case MV_UID_ABS_POS:
-	        m_mou = m;
-		while (GsCheckMouseEvent ()) continue;
-		break;
-	case MV_UID_KBD:	/* KBD event */
-	        m_kbd = m;
-		GsCheckKeyboardEvent ();
-		break;
-	case MV_UID_TIMER:	/* Microwindows does nothing with these.. */
-	case MV_UID_INVALID:
-	default:
-	        break;
-	}
-}
-#endif /* RTEMS*/
 
 // HELLO OS NONETWORK
+#if NONETWORK
 void
 GsSelect(GR_TIMEOUT timeout)
 {
@@ -815,6 +691,92 @@ GsSelect(GR_TIMEOUT timeout)
 		continue;
 	}
 	syscall_wait(1);
+}
+#else /* BUCKET Network */
+void
+GsSelect(GR_TIMEOUT timeout)
+{
+	int r;
+	struct msg_head *msg;
+
+	/* Set up requester for use in the main message_receive(): */
+	r=keyboard_request_key();
+
+	/* handle client connections*/
+	curclient = root_client;
+	while(curclient) {
+		if(curclient->waiting_for_event && curclient->eventhead) {
+			curclient->waiting_for_event = FALSE;
+			GrGetNextEventWrapperFinish(curclient->id);
+			return;
+		}
+		curclient = curclient->next;
+	}
+
+#if MW_FEATURE_TIMERS
+	/* Set up the timeout for the main select(): */
+	if (timeout == (GR_TIMEOUT) -1L) {
+		/* poll*/
+		tout.tv_sec = 0;
+		tout.tv_usec = 0;
+		to = &tout;
+	} else {
+		if(GdGetNextTimeout(&tout, timeout) == TRUE)
+			to = &tout;
+		else
+			to = NULL;
+	}
+#endif /* MW_FEATURE_TIMERS */
+
+	/* Wait for some input on any of the fds in the set or a timeout: */
+	r=bucket_select();
+	msg=bucket_selected_msg();
+	if(r<0) {
+		EPRINTF("select() call in main failed\n");
+		return;
+	}
+
+	if(mousedev.Poll()) {
+		/* If data is present on the mouse fd, service it: */
+		while(GsCheckMouseEvent()) {
+			continue;
+		}
+	}
+	if(kbddev.Poll()) {
+		/* If data is present on the keyboard fd, service it: */
+		while(GsCheckKeyboardEvent())
+			continue;
+	}
+
+	if(r==BUCKET_SELECT_DATA) {
+		if(bucket_isset(un_sock)) {
+			/* If a client is trying to connect, accept it: */
+			GsAcceptClient();
+		}
+		else {
+			/* If a client is sending us a command, handle it: */
+			/* msg->command ==> source qid ==> client id, becouse command-field can be used to select */
+
+			/* If a client is sending us a command, handle it: */
+			curclient = root_client;
+			while(curclient) {
+				GR_CLIENT *curclient_next;
+				/* curclient may be freed in GsDropClient*/
+				curclient_next = curclient->next;
+				if(bucket_isset(curclient->id)) {
+					GsHandleClient(curclient->id);
+				}
+				curclient = curclient_next;
+			}
+		}
+	}
+#if MW_FEATURE_TIMERS
+	else {
+		GdTimeout();
+	}
+#endif
+
+#endif /* NONETWORK */
 }
 
 #if VTSWITCH

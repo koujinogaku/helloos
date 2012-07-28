@@ -31,12 +31,17 @@ MOUSEDEVICE mousedev = {
  * Open up the mouse device.
  * Returns the fd if successful, or negative if unsuccessful.
  */
+static int MOU_origmode;
 int MOU_Open(MOUSEDEVICE *pmd)
 {
     if (mouse_init() < 0)
 	return -1;
     /* return the x11 file descriptor for select */
-    return 1;  
+    if(mouse_request_code(TRUE) < 0)
+	return -1;
+    MOU_origmode=mouse_set_wait(FALSE);
+
+    return 1;
 }
 
 /*
@@ -45,7 +50,8 @@ int MOU_Open(MOUSEDEVICE *pmd)
 void
 MOU_Close(void)
 {
-    /* nop */
+    mouse_request_code(FALSE);
+    mouse_set_wait(MOU_origmode);
 }
 
 /*
@@ -79,9 +85,13 @@ MOU_Read(MWCOORD *dx, MWCOORD *dy, MWCOORD *dz, int *bp)
 {
     int button=0,mdx=0,mdy=0;
     int buttons=0;
+    int r;
 
-    if(mouse_getcode(&button, &mdx, &mdy)<0)
+    if((r=mouse_getcode(&button, &mdx, &mdy))<0)
         return -1;
+
+    if(r==0)
+      return 0;
 
     *dx = mdx;
     *dy = mdy;

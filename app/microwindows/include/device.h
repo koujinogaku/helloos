@@ -11,6 +11,12 @@
 #include "mwtypes.h"				/* public export typedefs*/
 #include "mwsystem.h"
 
+#define WNX_QNM_WINDOW     MSGQUENAMES_WINDOW
+#define WNX_SRV_WINDOW     WNX_QNM_WINDOW
+#define WNX_CMD_CONNECT    0x0001
+#define WNX_CMD_DATA       0x0002
+
+
 /* Changeable limits and options*/
 #define ALPHABLEND	0			/* =1 to include blending code*/
 #define DYNAMICREGIONS	1			/* =1 to use MWCLIPREGIONS*/
@@ -21,7 +27,7 @@
 #define USE_ALLOCA	0			/* alloca() is available */
 #define FASTJPEG	0			/* =1 for temp quick jpeg 8bpp*/
 #define HAVE_MMAP   0       		/* =1 to use mmap if available*/
-#define NONETWORK   1
+#define NONETWORK   0/*1*/
 
 #define TRANSLATE_ESCAPE_SEQUENCES  1		/* =1 to parse fnkeys w/tty driver*/
 

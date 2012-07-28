@@ -21,9 +21,10 @@
  * documentation, just skip that step and we will do it for you.
  */
 #include "portunixstd.h"
-#include "portunixsocket.h"
 #include "memory.h"
 #include "string.h"
+#include "bucket.h"
+#include "environm.h"
 
 #include "nano-X.h"
 #include "serv.h"
@@ -57,7 +58,7 @@ static int nxSharedMemSize;	/* Size in bytes of shared mem segment*/
 #endif
 
 static int regfdmax = -1;	/* GrRegisterInput globals*/
-static fd_set regfdset;
+//static fd_set regfdset;
 
 /**
  * Human-readable error strings.
@@ -104,7 +105,11 @@ ReadBlock(void *b, int n)
 
 	nxFlushReq(0L,0);
 	while(v < ((char *) b + n)) {
+#if HELLOOS
+		i = bucket_recv(nxSocket, v, ((char *) b + n - v));
+#else
 		i = read(nxSocket, v, ((char *) b + n - v));
+#endif
 		if ( i <= 0 ) {
 			if ( i == 0 ) {
 				/* We should maybe produce an event here,
@@ -114,10 +119,13 @@ ReadBlock(void *b, int n)
 					"server\n");
 				exit(1);
 			}
+#if HELLOOS
+			EPRINTF("nxclient: bad readblock %d, errno %d\n", i, i);
+#else
 			if ( errno == EINTR || errno == EAGAIN )
 				continue;
-
 			EPRINTF("nxclient: bad readblock %d, errno %d\n", i, errno);
+#endif
 			return -1;
 		}
 		v += i;
@@ -266,10 +274,12 @@ CheckErrorEvent(GR_EVENT *ep)
 int 
 GrOpen(void)
 {
-	size_t 		size;
 	nxOpenReq	req;
 	int		tries;
 	int		ret = 0;
+#if !HELLOOS
+	size_t 		size;
+
 #if ADDR_FAM == AF_NANO
 	struct sockaddr_na name;
 #elif ADDR_FAM == AF_INET
@@ -288,6 +298,7 @@ GrOpen(void)
 #else
 #error "ADDR_FAM not defined to AF_NANO, AF_INET or AF_UNIX"
 #endif
+#endif
 	ACCESS_PER_THREAD_DATA()
 	
 	/* check already open*/
@@ -295,12 +306,17 @@ GrOpen(void)
         	return nxSocket;
 
 	/* try to get socket*/
+#if HELLOOS
+	if ((nxSocket = bucket_open()) < 0)
+#else
 	if ((nxSocket = socket(ADDR_FAM, SOCK_STREAM, 0)) == -1)
+#endif
 		return -1;
 
 	/* initialize global critical section lock*/
 	LOCK_INIT(&nxGlobalLock);
 
+#if !HELLOOS
 #if ADDR_FAM == AF_NANO
 	name.sun_family = AF_NANO;
 	name.sun_no = GR_ELKS_SOCKET;		/* AF_NANO socket 79*/
@@ -322,29 +338,40 @@ GrOpen(void)
 	size = (offsetof(struct sockaddr_un, sun_path) +
 		strlen(name.sun_path) + 1);
 #endif
-
+#endif
 	/*
 	 * Try to open the connection ten times,
 	 * waiting 0.1 or 2.0 seconds between attempts.
 	 */
 	for (tries=1; tries<=10; ++tries) {
+#if HELLOOS
+		ret = bucket_connect(nxSocket, NX_QNM_BUCKET, NX_SRV_BUCKET);
+		if (ret >= 0)
+			break;
+		syscall_wait(2);
+#else
 		struct timespec req;
-
 		ret = connect(nxSocket, (struct sockaddr *) &name, size);
+
 		if (ret >= 0)
 			break;
 #if ADDR_FAM == AF_INET
 		req.tv_sec = 0;
 		req.tv_nsec = 100000000L;
-#else
+#else // ADDR_FAM
 		req.tv_sec = 2;
 		req.tv_nsec = 0;
-#endif
+#endif //ADDR_FAM
 		nanosleep(&req, NULL);
+#endif // HELLOOS
 		EPRINTF("nxclient: retry connect attempt %d\n", tries);
 	}
 	if (ret == -1) {
+#if HELLOOS
+		bucket_close(nxSocket);
+#else
 		close(nxSocket);
+#endif // HELLOOS
 		nxSocket = -1;
 		return -1;
 	}
@@ -411,7 +438,11 @@ GrClose(void)
 	alarm(0);
 	signal(SIGALRM, oldSignalHandler);
 #endif
+#if HELLOOS
+	bucket_close(nxSocket);
+#else
 	close(nxSocket);
+#endif
 	nxSocket = -1;
 	LOCK_FREE(&nxGlobalLock);
 }
@@ -493,11 +524,18 @@ GrSetErrorHandler(GR_FNCALLBACKEVENT fncb)
 void
 GrDelay(GR_TIMEOUT msecs)
 {
+#if HELLOOS
+	msecs=msecs/10;
+	if(msecs==0)
+		msecs=1;
+	syscall_wait(msecs);
+#else
 	struct timeval timeval;
 
 	timeval.tv_sec = msecs / 1000;
 	timeval.tv_usec = (msecs % 1000) * 1000;
 	select(0, NULL, NULL, NULL, &timeval);
+#endif
 }
 
 /**
@@ -703,6 +741,7 @@ GrUnregisterInput(int fd)
  *
  * @ingroup nanox_event
  */
+#if !HELLOOS
 void
 GrPrepareSelect(int *maxfd,void *rfdset)
 {
@@ -728,6 +767,19 @@ GrPrepareSelect(int *maxfd,void *rfdset)
 	}
 	UNLOCK(&nxGlobalLock);
 }
+#else
+void
+GrPrepareSelect(int *maxfd,void *rfdset)
+{
+	ACCESS_PER_THREAD_DATA()
+	LOCK(&nxGlobalLock);
+	AllocReq(GetNextEvent);
+	GrFlush();
+	if(nxSocket > *maxfd)
+		*maxfd = nxSocket;
+	UNLOCK(&nxGlobalLock);
+}
+#endif
 
 /**
  * Handles events after the client has done a select() call.
@@ -746,7 +798,9 @@ GrPrepareSelect(int *maxfd,void *rfdset)
 void
 GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 {
+#if !HELLOOS
 	fd_set *	rfds = rfdset;
+#endif
 	int		fd;
 	GR_EVENT 	ev;
 
@@ -797,14 +851,22 @@ GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 void
 GrMainLoop(GR_FNCALLBACKEVENT fncb)
 {
+#if !HELLOOS
 	fd_set	rfds;
+#endif
 	int	setsize = 0;
 
 	for(;;) {
 		FD_ZERO(&rfds);
+#if HELLOOS
+		GrPrepareSelect(&setsize, 0);
+		if(bucket_select() > 0)
+			GrServiceSelect(0, fncb);
+#else
 		GrPrepareSelect(&setsize, &rfds);
 		if(select(setsize+1, &rfds, NULL, NULL, NULL) > 0)
 			GrServiceSelect(&rfds, fncb);
+#endif
 	}
 }
 
@@ -928,10 +990,12 @@ GrGetNextEventTimeout(GR_EVENT * ep, GR_TIMEOUT timeout)
 static void
 _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 {
+#if !HELLOOS
 	fd_set		rfds;
+	struct timeval	to;
+#endif
 	int		setsize = 0;
 	int		e;
-	struct timeval	to;
 	ACCESS_PER_THREAD_DATA()
 
 
@@ -945,13 +1009,22 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 	 * that point, a single stored event won't work, and the
 	 * client needs an event queue.
 	 */
+#if HELLOOS
+	GrPrepareSelect(&setsize, 0);
+#else
 	GrPrepareSelect(&setsize, &rfds);
 	if (timeout) {
 		to.tv_sec = timeout / 1000;
 		to.tv_usec = (timeout % 1000) * 1000;
 	}
+#endif
 
-	if((e = select(setsize+1, &rfds, NULL, NULL, timeout ? &to : NULL))>0) {
+#if HELLOOS
+	if((e = bucket_select())>0)
+#else
+	if((e = select(setsize+1, &rfds, NULL, NULL, timeout ? &to : NULL))>0)
+#endif
+	{
 		int fd;
 
 		if(FD_ISSET(nxSocket, &rfds)) {
@@ -981,6 +1054,11 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 		 */
 		ep->type = GR_EVENT_TYPE_TIMEOUT;
 	} else {
+#if HELLOOS
+		EPRINTF("nxclient: select failed\n");
+		GrClose();
+		exit(1);
+#else
 		if(errno == EINTR) {
 			ep->type = GR_EVENT_TYPE_NONE;
 		} else {
@@ -988,6 +1066,7 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 			GrClose();
 			exit(1);
 		}
+#endif
 	}
 }
 
@@ -2502,9 +2581,9 @@ GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
 		nxCreateFontReq *req;
 
 		if (!name)
-			name = "";
+			name = (GR_CHAR *)"";
 
-		req = AllocReqExtra(CreateFont, strlen(name) + 1);
+		req = AllocReqExtra(CreateFont, strlen((char *)name) + 1);
 		req->height = height;
 		strcpy((char *)GetReqData(req), name);
 
@@ -3836,7 +3915,7 @@ GrSetWMProperties(GR_WINDOW_ID wid, GR_WM_PROPERTIES *props)
 	int		s;
 
 	if ((props->flags & GR_WM_FLAGS_TITLE) && props->title)
-		s = strlen(props->title) + 1;
+		s = strlen((char*)props->title) + 1;
 	else s = 0;
 
 	LOCK(&nxGlobalLock);
@@ -3978,7 +4057,7 @@ GrSetSelectionOwner(GR_WINDOW_ID wid, GR_CHAR *typelist)
 
 	LOCK(&nxGlobalLock);
 	if(wid) {
-		len = strlen(typelist) + 1;
+		len = strlen((char*)typelist) + 1;
 		req = AllocReqExtra(SetSelectionOwner, len);
 		p = GetReqData(req);
 		memcpy(p, typelist, len);

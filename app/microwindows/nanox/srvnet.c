@@ -15,35 +15,12 @@
  * connections from clients, receives functions from them, and dispatches
  * events to them.
  */
-#include <stdio.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/socket.h>
-#if HAVE_SHAREDMEM_SUPPORT
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#endif
-#if ELKS
-#include <linuxmt/na.h>
-#elif __ECOS
-#include <netinet/in.h>
+#include "portunixstd.h"
+#include "memory.h"
+#include "bucket.h"
 
-#else
-#ifndef TRIMEDIA
-#include <sys/un.h>
-#endif
-#endif
 #include "serv.h"
 #include "nxproto.h"
-
-/* fix bad MIPS sys headers...*/
-#ifndef SOCK_STREAM
-#define SOCK_STREAM	2	/* <asm/socket.h>*/
-#endif
 
 extern	int		un_sock;
 extern	GR_CLIENT	*root_client;
@@ -1045,7 +1022,7 @@ GrGetWMPropertiesWrapper(void *r)
 	GrGetWMProperties(req->windowid, &props);
 
 	if(props.title)
-		textlen = strlen((const char *)props.title) + 1;
+		textlen = strlen((char *)props.title) + 1;
 	else textlen = 0;
 
 	GsWriteType(current_fd,GrNumGetWMProperties);
@@ -1158,7 +1135,7 @@ GrGetSelectionOwnerWrapper(void *r)
 	GsWrite(current_fd, &wid, sizeof(wid));
 
 	if(wid) {
-		len = strlen((const char *)typelist) + 1;
+		len = strlen((char *)typelist) + 1;
 		GsWrite(current_fd, &len, sizeof(len));
 		GsWrite(current_fd, typelist, len);
 	}
@@ -1784,95 +1761,99 @@ GrShmCmdsFlushWrapper(void *r)
  * This function is used to bind to the named socket which is used to
  * accept connections from the clients.
  */
+//int 
+//GsOpenSocket(void)
+//{
+//  struct sockaddr_un sckt;
+//#ifndef SUN_LEN
+//#define SUN_LEN(ptr)	((size_t) (((struct sockaddr_un *) 0)->sun_path) + strlen ((ptr)->sun_path))
+//#endif
+
+	//if (access(GR_NAMED_SOCKET, F_OK) == 0) {
+	//	/* FIXME: should try connecting to see if server is active */
+	//	if(unlink(GR_NAMED_SOCKET))
+	//		return -1;
+	//}
+
+	/* Create the socket: */
+	//if((un_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+	//	return -1;
+	
+
+	/* Bind a name to the socket: */
+	//sckt.sun_family = AF_UNIX;
+	//strncpy(sckt.sun_path, GR_NAMED_SOCKET, sizeof(sckt.sun_path));
+
+	//if(bind(un_sock, (struct sockaddr *) &sckt, SUN_LEN(&sckt)) < 0)
+	//	return -1;
+
+	/* Start listening on the socket: */
+	//if(listen(un_sock, 5) == -1)
+	//	return -1;
+	//return 1;
+//}
+
 int 
 GsOpenSocket(void)
 {
-#if ELKS
-	struct sockaddr_na sckt;
-#ifndef SUN_LEN
-#define SUN_LEN(ptr)	(sizeof(sckt))
-#endif
-#elif __ECOS
-	struct sockaddr_in sckt;
-#ifndef SUN_LEN
-#define SUN_LEN(ptr)	(sizeof(sckt))
-#endif
-#else
-	struct sockaddr_un sckt;
-#ifndef SUN_LEN
-#define SUN_LEN(ptr)	((size_t) (((struct sockaddr_un *) 0)->sun_path) \
-		      		+ strlen ((ptr)->sun_path))
-#endif
-#endif /* ELKS */
 
-#if ELKS
-	if((un_sock = socket(AF_NANO, SOCK_STREAM, 0)) == -1)
-		return -1;
-
-	sckt.sun_family = AF_NANO;
-	sckt.sun_no = GR_NUMB_SOCKET;
-#elif __ECOS
-	/* Create the socket */
-	if((un_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) 
-	    return -1;
-
-	/* Bind to any/all local IP addresses */
-	memset( &sckt, '\0', sizeof(sckt) );
-	sckt.sin_family = AF_INET;
-	sckt.sin_len = sizeof(sckt);
-	sckt.sin_port = htons(6600);
-	sckt.sin_addr.s_addr = INADDR_ANY;
-#else
-	if (access(GR_NAMED_SOCKET, F_OK) == 0) {
-		/* FIXME: should try connecting to see if server is active */
-		if(unlink(GR_NAMED_SOCKET))
-			return -1;
-	}
-
+	// ============== Hello OS bucket =============================
 	/* Create the socket: */
-	if((un_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+	if((un_sock = bucket_open()) < 0)
 		return -1;
 
 	/* Bind a name to the socket: */
-	sckt.sun_family = AF_UNIX;
-	strncpy(sckt.sun_path, GR_NAMED_SOCKET, sizeof(sckt.sun_path));
-#endif /* ELKS */
-	if(bind(un_sock, (struct sockaddr *) &sckt, SUN_LEN(&sckt)) < 0)
+	if(bucket_bind(un_sock, NX_QNM_BUCKET, NX_SRV_BUCKET)<0)
 		return -1;
 
-	/* Start listening on the socket: */
-	if(listen(un_sock, 5) == -1)
-		return -1;
 	return 1;
 }
 
+//void
+//GsCloseSocket(void)
+//{
+//	if(un_sock != -1)
+//		close(un_sock);
+//	un_sock = -1;
+//	unlink(GR_NAMED_SOCKET);
+//}
 void
 GsCloseSocket(void)
 {
+	// ============== Hello OS bucket =============================
 	if(un_sock != -1)
-		close(un_sock);
+		bucket_close(un_sock);
 	un_sock = -1;
-	unlink(GR_NAMED_SOCKET);
 }
 
 /*
  * This function is used to accept a connnection from a client.
  */
+//void
+//GsAcceptClient(void)
+//{
+//	int i;
+//	struct sockaddr_un sckt;
+//
+//	socklen_t size = sizeof(sckt);
+//
+//	if((i = accept(un_sock, (struct sockaddr *) &sckt, &size)) == -1) {
+//		EPRINTF("nano-X: Error accept failed (%d)\n", errno);
+//		return;
+//	}
+//	GsAcceptClientFd(i);
+//}
 void
 GsAcceptClient(void)
 {
 	int i;
-#if ELKS
-	struct sockaddr_na sckt;
-#elif __ECOS
-	struct sockaddr_in sckt;
-#else
-	struct sockaddr_un sckt;
-#endif
-	socklen_t size = sizeof(sckt);
 
-	if((i = accept(un_sock, (struct sockaddr *) &sckt, &size)) == -1) {
+	if((i = bucket_accept(un_sock)) < 0) {
+#if HELLOOS
+		EPRINTF("nano-X: Error accept failed (%d)\n", i);
+#else
 		EPRINTF("nano-X: Error accept failed (%d)\n", errno);
+#endif
 		return;
 	}
 	GsAcceptClientFd(i);
@@ -2102,8 +2083,9 @@ GsDropClient(int fd)
 	GR_CLIENT *client;
 
 	if((client = GsFindClient(fd))) { /* If it exists */
+#if UNIX
 		close(fd);	/* Close the socket */
-
+#endif
 		GsDestroyClientResources(client);
 		if(client == root_client)
 			root_client = client->next;
@@ -2133,23 +2115,27 @@ GsPrintResources();
  * returns 0 for both error conditions and no data.
  */
 int
-#if ELKS
-GsRead(int fd, char *buf, int c)
-#else
 GsRead(int fd, void *buf, int c)
-#endif
 {
 	int e, n;
 
 	n = 0;
 
 	while(n < c) {
+#if HELLOOS
+		e = bucket_recv(fd, ((char *)buf) + n, c - n);
+#else
 		e = read(fd, ((char *)buf) + n, c - n);
+#endif
 		if(e <= 0) {
 			if (e == 0)
 				EPRINTF("nano-X: client closed socket: %d\n", fd);
-			else EPRINTF("nano-X: GsRead failed %d %d: %d\r\n",
-			       e, n, errno);
+			else
+#if HELLOOS
+				EPRINTF("nano-X: GsRead failed %d %d: %d\r\n", e, n, e);
+#else
+				EPRINTF("nano-X: GsRead failed %d %d: %d\r\n", e, n, errno);
+#endif
 			GsClose(fd);
 			return -1;
 		}
@@ -2169,7 +2155,11 @@ int GsWrite(int fd, void *buf, int c)
 	n = 0;
 
 	while(n < c) {
+#if HELLOOS
+		e = bucket_send(fd, ((char *) buf + n), (c - n));
+#else
 		e = write(fd, ((char *) buf + n), (c - n));
+#endif
 		if(e <= 0) {
 			GsClose(fd);
 			return -1;

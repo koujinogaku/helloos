@@ -7,19 +7,34 @@ AR=$(TS)-ar
 OBJDUMP=$(TS)-objdump
 CC=$(TS)-gcc
 CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(WININC)
-OBJSCLI=# client.o clientfb.o nxproto.o srvnet.o 
-OBJS=$(OBJSCLI) nxdraw.o nxtransform.o nxutil.o srvclip.o srvclip.o srvevent.o srvfunc.o srvmain.o srvutil.o
+LSFILE=../../../core/library/appl.ls
+STDLIBDIR=../../../core/library
+STARTOBJ=$(STDLIBDIR)/startappl.o
+APPLIB=$(STDLIBDIR)/libappl.a
 
-TARGET=../lib/libmwnanox.a
+OBJSCLI=client.o nxproto.o error.o nxutil.o #clientfb.o 
+OBJS=nxdraw.o nxtransform.o srvclip.o srvclip.o srvevent.o srvfunc.o srvutil.o srvnet.o
+LIBCLI=../lib/libmwnanox.a
+LIBSRV=../lib/libmwnanoxsrv.a
+LIBDRIVERS=../lib/libmwdrivers.a
+LIBENGINE=../lib/libmwengine.a
+LIBFONTS=../lib/libmwfonts.a
+LIBNANOXSRV=$(LIBSRV) $(LIBDRIVERS) $(LIBENGINE) $(LIBFONTS)
+
+TARGET=$(LIBCLI) $(LIBSRV) nanox.out
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS) makefile
+$(LIBCLI): $(OBJSCLI) makefile
 	$(AR) r $@ $?
-	ranlib $(TARGET)
+	ranlib $@
 
-%.sys: %.o %.ls
-	$(LD) -T $*.ls -Map $*.map --cref $< -o $@
+$(LIBSRV): $(OBJS) makefile
+	$(AR) r $@ $?
+	ranlib $@
+
+nanox.out: srvmain.o $(LIBSRV)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) srvmain.o $(LIBNANOXSRV) $(APPLIB) -o $@
 
 %.a: %.o
 	$(AR) r $@ $?

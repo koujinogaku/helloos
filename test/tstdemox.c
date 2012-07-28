@@ -206,6 +206,7 @@ ROWS = si.rows - 80;
 				exit(0);
 
 			case GR_EVENT_TYPE_NONE:
+				syscall_wait(10);
 				do_idle();
 				break;
 		}

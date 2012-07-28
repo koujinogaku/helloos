@@ -15,7 +15,7 @@
 #define vsprintf  print_vsformat
 #define free(m)   mfree(m)
 #define exit(r)   syscall_exit(r)
-#define getpid()  (0)
+#define getpid()  environment_getqueid()
 #define strcpy(dest,src)  strncpy(dest,src,1024)
 #define setbuf(fp,bf)  {}
 #define memory_chkheapaddr(m)  ( CFG_MEM_USERHEAP <= (unsigned int)(m) && (unsigned int)(m) < CFG_MEM_USERHEAPMAX )
@@ -23,13 +23,19 @@
 typedef unsigned int size_t;
 #define offsetof(type, member) ((size_t)&((type*)0)->member)
 
-typedef unsigned int time_t;
-struct timespec {
+// ===== Socket =====
+#define AF_HELLO
+#define NX_QNM_BUCKET MSGQUENAMES_WINDOW
+#define NX_SRV_BUCKET MSGQUENAMES_WINDOW
 
-	time_t	tv_sec;		/* seconds */
-	long	tv_nsec;	/* nanoseconds */
+#define FD_SET(a,b)
+#define FD_ZERO(a)
+#define FD_CLR(a,b)
+#define FD_ISSET(fd, b) bucket_isset(fd)
+
+//#define SOCK_STREAM     1
+
+struct sockaddr_un {
 };
-int nanosleep(const struct timespec *req, struct timespec *rem); 
-
 
 #endif
