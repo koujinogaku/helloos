@@ -166,7 +166,7 @@ GsTerminate(void)
 	GdCloseMouse();
 	GdCloseScreen(psd);
 	GdCloseKeyboard();
-	syscall_exit(0);
+	exit(0);
 }
 //
 // Update mouse status and issue events on it if necessary.

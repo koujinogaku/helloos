@@ -15,6 +15,7 @@
 #include "print.h"
 #include "mouse.h"
 #include "keyboard.h"
+#include "stdlib.h"
 
 #include "serv.h"
 #include "mwtypes.h"

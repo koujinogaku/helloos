@@ -2086,6 +2086,9 @@ GsDropClient(int fd)
 #if UNIX
 		close(fd);	/* Close the socket */
 #endif
+#if HELLOOS && !NONETWORK
+		bucket_close(fd);
+#endif
 		GsDestroyClientResources(client);
 		if(client == root_client)
 			root_client = client->next;

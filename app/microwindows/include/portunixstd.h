@@ -10,11 +10,11 @@
 
 //#include "dbgmemory.h"
 //#define malloc(m) dbg_malloc(m)
+#include "stdlib.h"
 
 #define sprintf   print_sformat
 #define vsprintf  print_vsformat
 #define free(m)   mfree(m)
-#define exit(r)   syscall_exit(r)
 #define getpid()  environment_getqueid()
 #define strcpy(dest,src)  strncpy(dest,src,1024)
 #define setbuf(fp,bf)  {}

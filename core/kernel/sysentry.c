@@ -18,6 +18,7 @@
 #include "kernel.h"
 #include "kmemory.h"
 #include "mutex.h"
+#include "kmem.h"
 
 extern int syscall_entry_intr(void);
 
@@ -135,6 +136,9 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
   case SYSCALL_FN_QUE_LOOKUP:
     eax = syscall_que_lookup((unsigned int)ebx);
     break;
+  case SYSCALL_FN_QUE_LIST:
+    eax = syscall_que_list(ebx, ecx, (void*)edx);
+    break;
   case SYSCALL_FN_INTR_REGIST:
     eax = syscall_intr_regist(ebx, ecx);
     break;
@@ -152,6 +156,9 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
     break;
   case SYSCALL_FN_PGM_DELETE:
     eax = syscall_pgm_delete(ebx);
+    break;
+  case SYSCALL_FN_PGM_LIST:
+    eax = syscall_pgm_list(ebx, ecx, (void*)edx);
     break;
   case SYSCALL_FN_FILE_OPEN:
     eax = syscall_file_open((char *)ebx, ecx);
@@ -287,10 +294,13 @@ int syscall_que_trypeeksize(int queid)
 {
   return queue_trypeek_nextsize(queid);
 }
-
 int syscall_que_lookup(unsigned int quename)
 {
   return queue_lookup(quename);
+}
+int syscall_que_list(int start, int count, void *qlist)
+{
+  return queue_list(start, count, qlist);
 }
 
 int syscall_intr_regist(int irq, int queid)
@@ -319,11 +329,14 @@ int syscall_pgm_setargs(int taskid, char *args, int argsize)
 int syscall_pgm_start(int taskid, int exitque)
 {
   return program_start(taskid, exitque);
-
 }
 int syscall_pgm_delete(int taskid)
 {
   return program_delete(taskid);
+}
+int syscall_pgm_list(int start, int count, void *plist)
+{
+  return program_list(start, count, plist);
 }
 
 int syscall_file_open(char *filename, int mode)

@@ -13,6 +13,7 @@
 #include "kmessage.h"
 #include "queue.h"
 #include "cpu.h"
+#include "kmem.h"
 
 #define PGM_STAT_NOTUSE 0
 #define PGM_STAT_USED   1
@@ -25,6 +26,7 @@ struct PGM {
   unsigned short taskid;
   unsigned short exitque;
   void *pgd;
+  char pgmname[8];
 };
 
 static int pgm_tbl_mutex=0;
@@ -54,6 +56,12 @@ struct PGM *pgm_alloc(void)
   return pgm;
 }
 
+void pgm_free(struct PGM *pgm)
+{
+  pgm->status=PGM_STAT_NOTUSE;
+  list_del(pgm);
+}
+
 static struct PGM *pgm_find(int taskid)
 {
   struct PGM *pgm;
@@ -80,8 +88,7 @@ int pgm_delete(int taskid)
   if(pgm==NULL)
     return ERRNO_NOTEXIST;
 
-  pgm->status=PGM_STAT_NOTUSE;
-  list_del(pgm);
+  pgm_free(pgm);
 
   return 0;
 }
@@ -130,6 +137,7 @@ int program_load(char *filename, int type)
 
   fp = fat_open_file(filename, FAT_O_RDONLY);
   if(fp<0) {
+    pgm_free(pgm);
 /*
     console_puts("file open error=");
     console_puts(filename);
@@ -141,6 +149,7 @@ int program_load(char *filename, int type)
 
   r=fat_get_filesize(fp,&filesize);
   if(r<0) {
+    pgm_free(pgm);
     console_puts("file size error=");
     console_puts(filename);
     console_puts("\n");
@@ -156,6 +165,7 @@ int program_load(char *filename, int type)
   pagesize=page_frame_size(filesize);
   pgm->pgd=page_create_pgd();
   if(pgm->pgd==NULL){
+    pgm_free(pgm);
     console_puts("pgd alloc error\n");
     mutex_unlock(&pgm_tbl_mutex);
     return ERRNO_RESOURCE;
@@ -171,6 +181,7 @@ console_puts("\n");
   progaddr=(void*)CFG_MEM_USER;
   r=page_alloc_vmem(pgm->pgd,progaddr,pagesize,(PAGE_TYPE_USER|PAGE_TYPE_RDWR));
   if(r<0){
+    pgm_free(pgm);
     console_puts("vmem alloc error\n");
     mutex_unlock(&pgm_tbl_mutex);
     return ERRNO_RESOURCE;
@@ -178,6 +189,7 @@ console_puts("\n");
 
   loadbuf=mem_alloc(MEM_PAGESIZE);
   if(loadbuf==0) {
+    pgm_free(pgm);
     console_puts("mem alloc error\n");
     mutex_unlock(&pgm_tbl_mutex);
     return ERRNO_RESOURCE;
@@ -189,6 +201,7 @@ console_puts("\n");
 
     r=fat_read_file(fp,loadbuf,512);
     if(r<0) {
+      pgm_free(pgm);
       console_puts("file read error\n");
       mutex_unlock(&pgm_tbl_mutex);
       return r;
@@ -198,6 +211,7 @@ console_puts("\n");
   
   r=fat_close_file(fp);
   if(r<0) {
+    pgm_free(pgm);
     console_puts("file close error\n");
     mutex_unlock(&pgm_tbl_mutex);
     return r;
@@ -209,10 +223,8 @@ console_puts("\n");
 //page_dump_pgd(tstpgd);
 
   r = page_alloc_vmem(pgm->pgd,(void*)(CFG_MEM_USERDATAMAX-PAGE_PAGESIZE),PAGE_PAGESIZE,(PAGE_TYPE_USER|PAGE_TYPE_RDWR));
-  if(r<0) {
-    return r;
-  }
   if(r<0){
+    pgm_free(pgm);
     console_puts("vmem alloc error\n");
     mutex_unlock(&pgm_tbl_mutex);
     return ERRNO_RESOURCE;
@@ -223,6 +235,7 @@ console_puts("\n");
 
   taskid = task_create_process(pgm->pgd,progaddr,CFG_MEM_USERSTACKTOP);
   if(taskid<0) {
+    pgm_free(pgm);
     console_puts("task create error\n");
     mutex_unlock(&pgm_tbl_mutex);
     return taskid;
@@ -235,6 +248,7 @@ console_puts("\n");
     if(pgm->pgd!=0) {
       r=page_map_vga(pgm->pgd);
       if(r<0) {
+        pgm_free(pgm);
         console_puts("vga map error\n");
         mutex_unlock(&pgm_tbl_mutex);
         return r;
@@ -244,6 +258,7 @@ console_puts("\n");
 
   pgm->taskid = taskid;
 
+  strncpy(pgm->pgmname,filename,sizeof(pgm->pgmname));
   mutex_unlock(&pgm_tbl_mutex);
 
   return taskid;
@@ -383,4 +398,27 @@ int program_exitevent(struct msg_head *msg)
   }
 
   return -1;
+}
+int program_list(int start, int count, struct kmem_program *plist)
+{
+  struct PGM *pgm;
+  int i=0;
+  int n=0;
+
+  list_for_each(pgmtbl,pgm)
+  {
+    if(i>=start) {
+      plist->id = pgm->id;
+      plist->status = pgm->status;
+      plist->taskid = pgm->taskid;
+      plist->exitque = pgm->exitque;
+      plist->pgd = pgm->pgd;
+      strncpy(plist->pgmname,pgm->pgmname,sizeof(plist->pgmname));
+      plist++;
+      n++;
+      if(n>=count)
+        break;
+    }
+  }
+  return n;
 }

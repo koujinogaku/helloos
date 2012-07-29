@@ -35,7 +35,7 @@ void tst_console(void)
 
   display_puts("hello\n");
 
-//  syscall_exit(123);
+//  exit(123);
 /*
   for(i=0;i<5;i++) {
     for(j=0;j<i;j++)

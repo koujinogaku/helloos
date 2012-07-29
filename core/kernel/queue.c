@@ -8,6 +8,7 @@
 #include "queue.h"
 #include "errno.h"
 #include "console.h"
+#include "kmem.h"
 
 #define QUEUE_TBLSZ 128
 #define QUEUE_SZ    MEM_PAGESIZE
@@ -456,3 +457,35 @@ void queue_make_msg(struct msg_head *msg, int size, int srv, int cmd, int arg, v
 }
 #endif
 
+int queue_list(int start, int count, struct kmem_queue *qlist)
+{
+  int queid;
+  int i=0,n=0;
+  int numwait;
+  struct list_head *waittask;
+
+  for(queid=1;queid<QUEUE_TBLSZ;queid++) {
+    if(queuetbl[queid].status!=QUEUE_STAT_NOTUSE) {
+      if(i>=start) {
+        qlist->id = queid;
+        qlist->in = queuetbl[queid].in;
+        qlist->out = queuetbl[queid].out;
+        qlist->name = queuetbl[queid].name;
+        qlist->status = queuetbl[queid].status;
+        qlist->dmy = queuetbl[queid].dmy;
+        numwait=0;
+        list_for_each(&(queuetbl[queid].waitlist),waittask) {
+          numwait++;
+        }
+        qlist->numwait = numwait;
+        qlist++;
+        n++;
+        if(n>=count)
+          break;
+      }
+      i++;
+    }
+  }
+
+  return n;
+}

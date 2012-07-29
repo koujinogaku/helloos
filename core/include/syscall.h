@@ -50,6 +50,8 @@
 #define SYSCALL_FN_MTX_LOCK      41
 #define SYSCALL_FN_MTX_TRYLOCK   42
 #define SYSCALL_FN_MTX_UNLOCK    43
+#define SYSCALL_FN_PGM_LIST      44
+#define SYSCALL_FN_QUE_LIST      45
 
 void syscall_init(void);
 
@@ -77,6 +79,7 @@ int syscall_que_tryget(int queid, void *msg);
 int syscall_que_lookup(unsigned int quename);
 int syscall_que_peeksize(int queid);
 int syscall_que_trypeeksize(int queid);
+int syscall_que_list(int start, int count, void *qlist);
 
 int syscall_mtx_lock(int *mutex);
 int syscall_mtx_trylock(int *mutex);
@@ -89,6 +92,7 @@ int syscall_pgm_load(char *filename, int type);
 int syscall_pgm_setargs(int taskid, char *args, int argsize);
 int syscall_pgm_start(int taskid, int exitque);
 int syscall_pgm_delete(int taskid);
+int syscall_pgm_list(int start, int count, void *plist);
 
 #define SYSCALL_FILE_O_RDONLY 0x0001
 #define SYSCALL_FILE_O_WRONLY 0x0002

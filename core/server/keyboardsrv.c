@@ -255,7 +255,8 @@ display_puts(s);
       int2dec(kbd_has_request,s);
       display_puts(s);
       display_puts("\n");
-      return r;
+      // Don't care becouse a error of other side.
+      //return r;
     }
     msg.req.h.size=sizeof(msg);
     r=message_get_userqueue(kbd_requestq, &msg);

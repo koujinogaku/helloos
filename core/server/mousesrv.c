@@ -139,6 +139,20 @@ int mouse_initsrv(void)
     syscall_puts("\n");
     return ERRNO_NOTINIT;
   }
+  r = syscall_que_lookup(MOU_QNM_MOUSE);
+  if(r<0 && r!=ERRNO_NOTEXIST) {
+    mou_queid = 0;
+    display_puts("mou_init msgq=");
+    int2dec(-r,s);
+    display_puts(s);
+    display_puts("\n");
+    return r;
+  }
+  if(r!=ERRNO_NOTEXIST) {
+    display_puts("mou_init mouse server is already exist \n");
+    return ERRNO_INUSE;
+  }
+
   r = syscall_que_setname(mou_queid, MOU_QNM_MOUSE);
   if(r<0) {
     mou_queid = 0;
@@ -285,7 +299,8 @@ int mouse_intr(union mou_msg *msg)
       }
     case MOUSE_STAT_INTR_FIRST:
       button=data;
-      mou_intrstat=MOUSE_STAT_INTR_SECOND;
+      if((button & 0xcc)==0x08) // Check the carry bit
+        mou_intrstat=MOUSE_STAT_INTR_SECOND;
       return 0;
 
     case MOUSE_STAT_INTR_SECOND:
@@ -318,7 +333,7 @@ int mouse_intr(union mou_msg *msg)
       int2dec(-r,s);
       display_puts(s);
       display_puts("\n");
-      return r;
+      mou_has_request=0;
     }
   }
 
@@ -423,7 +438,7 @@ int start(void)
     }
 
     if(r<0) {
-      display_puts("*** keyboard terminate ***\n");
+      display_puts("*** mouse terminate ***\n");
       return 255;
     }
   }

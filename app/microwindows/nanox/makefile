@@ -12,14 +12,13 @@ STDLIBDIR=../../../core/library
 STARTOBJ=$(STDLIBDIR)/startappl.o
 APPLIB=$(STDLIBDIR)/libappl.a
 
-OBJSCLI=client.o nxproto.o error.o nxutil.o #clientfb.o 
-OBJS=nxdraw.o nxtransform.o srvclip.o srvclip.o srvevent.o srvfunc.o srvutil.o srvnet.o
+OBJSCLI=client.o nxproto.o error.o nxutil.o nxtransform.o nxdraw.o #clientfb.o 
+OBJSSRV=srvmain.o srvclip.o srvevent.o srvfunc.o srvutil.o srvnet.o
 LIBCLI=../lib/libmwnanox.a
-LIBSRV=../lib/libmwnanoxsrv.a
 LIBDRIVERS=../lib/libmwdrivers.a
 LIBENGINE=../lib/libmwengine.a
 LIBFONTS=../lib/libmwfonts.a
-LIBNANOXSRV=$(LIBSRV) $(LIBDRIVERS) $(LIBENGINE) $(LIBFONTS)
+LIBNANOXSRV=$(LIBDRIVERS) $(LIBENGINE) $(LIBFONTS)
 
 TARGET=$(LIBCLI) $(LIBSRV) nanox.out
 
@@ -29,12 +28,8 @@ $(LIBCLI): $(OBJSCLI) makefile
 	$(AR) r $@ $?
 	ranlib $@
 
-$(LIBSRV): $(OBJS) makefile
-	$(AR) r $@ $?
-	ranlib $@
-
-nanox.out: srvmain.o $(LIBSRV)
-	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) srvmain.o $(LIBNANOXSRV) $(APPLIB) -o $@
+nanox.out: $(OBJSSRV)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(OBJSSRV) $(LIBNANOXSRV) $(APPLIB) -o $@
 
 %.a: %.o
 	$(AR) r $@ $?

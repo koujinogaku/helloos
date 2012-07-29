@@ -174,6 +174,13 @@ int syscall_que_lookup(unsigned int quename)
   SYSCALL_1(SYSCALL_FN_QUE_LOOKUP, r, quename);
   return r;
 }
+int syscall_que_list(int start, int count, void *qlist)
+{
+  int r=0;
+  r=*((int*)qlist); // check memory fault
+  SYSCALL_3(SYSCALL_FN_QUE_LIST, r, start, count, qlist);
+  return r;
+}
 
 int syscall_intr_regist(int irq, int queid)
 {
@@ -213,6 +220,13 @@ int syscall_pgm_delete(int taskid)
 {
   int r=0;
   SYSCALL_1(SYSCALL_FN_PGM_DELETE, r, taskid);
+  return r;
+}
+int syscall_pgm_list(int start, int count, void *plist)
+{
+  int r=0;
+  r=*((int*)plist); // check memory fault
+  SYSCALL_3(SYSCALL_FN_PGM_LIST, r, start, count, plist);
   return r;
 }
 

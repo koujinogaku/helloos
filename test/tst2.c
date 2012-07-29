@@ -30,7 +30,7 @@ void tst_console(void)
 //  display_putc(a);
 //syscall_tst3(12,34,56);
 
-//  syscall_exit(123);
+//  exit(123);
 /*
   for(i=0;i<5;i++) {
     for(j=0;j<i;j++)

@@ -6,6 +6,7 @@
 #include "nano-X.h"
 #include "device.h"
 #include "print.h"
+#include "stdlib.h"
 
 int test_nanox(void);
 
@@ -28,7 +29,7 @@ int test_nanox()
 
 	if (GrOpen() < 0) {
 		display_puts("Cannot open graphics\n");
-		syscall_exit(0);
+		exit(0);
 	}
 
 	GrSetErrorHandler(NULL);
@@ -96,7 +97,7 @@ int test_nanox()
 		case GR_EVENT_TYPE_CLOSE_REQ:
 			GrClose();
 display_puts("close event\n");
-			syscall_exit(0);
+			exit(0);
 			break;
 		case GR_EVENT_TYPE_ERROR:
 			print_format("demo2: Error (%s) ", event.error.name);

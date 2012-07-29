@@ -21,6 +21,5 @@ void word2hex(unsigned short num, char *str);
 void long2hex(unsigned long num, char *str);
 char numtohex1(char chr);
 char uppercase(char c);
-int atoi(const char* str);
 
 #endif
