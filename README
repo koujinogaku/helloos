@@ -17,8 +17,7 @@ Install:
 
 
 Run Demo:
-- mouse &
-- tstdemox
+- Run win.bat
 - Click mouse on any place. You can see the demo.
 - Press escape key to end.
 
@@ -26,7 +25,11 @@ Run Demo:
 Other Commands on command line:
 - DIR              - Show file names
 - TYPE [FileName]  - Show text in a file.
-- [FileName]       - Run a program file that name is *.out.
+- FREE             - Show system memory status.
+- CLS              - Clear screen.
+- PS               - List running programs.
+- QS               - List created message queues.
+- [FileName]       - Run a program file that name is *.out or *.bat.
 
 
 Program detail:
