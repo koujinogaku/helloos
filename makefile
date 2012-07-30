@@ -1,4 +1,4 @@
-TESTS= $(TESTDIR)/tstdemox.out #$(TESTDIR)/tstnanox.out #$(TESTDIR)/tstmouse.out #$(TESTDIR)/tst.out $(TESTDIR)/tst2.out #$(TESTDIR)/testmwin.out
+TESTS= $(TESTDIR)/tstdemox.out $(TESTDIR)/tst.out $(TESTDIR)/tst2.out ##$(TESTDIR)/tstnanox.out #$(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
 
 LOADERDIR=core/loader
 KERNELDIR=core/kernel
@@ -15,7 +15,7 @@ STDLIB=$(LIBDIR)/libappl.a
 LOADERS=$(LOADERDIR)/ipl.sys $(LOADERDIR)/setup.sys
 KERNEL=$(KERNELDIR)/kernel.sys
 SERVERS=$(SERVERDIR)/display.out $(SERVERDIR)/keyboard.out $(SERVERDIR)/command.out $(SERVERDIR)/mouse.out
-COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out $(COMMANDDIR)/free.out $(COMMANDDIR)/ps.out $(COMMANDDIR)/qs.out
+COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out $(COMMANDDIR)/free.out $(COMMANDDIR)/ps.out $(COMMANDDIR)/qs.out $(COMMANDDIR)/cls.out
 MICROWINLIB=$(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a $(MICROWINDIR)/lib/libmwnanox.a
 EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(MICROWINDIR)/nanox/nanox.out $(TESTS)
 

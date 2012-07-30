@@ -139,19 +139,6 @@ int mouse_initsrv(void)
     syscall_puts("\n");
     return ERRNO_NOTINIT;
   }
-  r = syscall_que_lookup(MOU_QNM_MOUSE);
-  if(r<0 && r!=ERRNO_NOTEXIST) {
-    mou_queid = 0;
-    display_puts("mou_init msgq=");
-    int2dec(-r,s);
-    display_puts(s);
-    display_puts("\n");
-    return r;
-  }
-  if(r!=ERRNO_NOTEXIST) {
-    display_puts("mou_init mouse server is already exist \n");
-    return ERRNO_INUSE;
-  }
 
   r = syscall_que_setname(mou_queid, MOU_QNM_MOUSE);
   if(r<0) {
@@ -383,6 +370,19 @@ int start(void)
   int r;
   union mou_msg cmd;
 
+  r = syscall_que_lookup(MOU_QNM_MOUSE);
+  if(r<0 && r!=ERRNO_NOTEXIST) {
+    mou_queid = 0;
+    display_puts("mou_init msgq=");
+    int2dec(-r,s);
+    display_puts(s);
+    display_puts("\n");
+    return r;
+  }
+  if(r!=ERRNO_NOTEXIST) {
+    display_puts("mou_init mouse server is already exist\n");
+    return 254;
+  }
   pic_disable(PIC_IRQ_KEYBRD);	/* キーボードを禁止 */
   pic_disable(PIC_IRQ_MOUSE);	/* マウス割り込みを禁止 */
   r=mouse_initsrv();
@@ -439,7 +439,7 @@ int start(void)
 
     if(r<0) {
       display_puts("*** mouse terminate ***\n");
-      return 255;
+      return 254;
     }
   }
   return 0;

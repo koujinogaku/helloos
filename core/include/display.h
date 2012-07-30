@@ -33,7 +33,7 @@ int display_puts(char *str);
 //void display_scroll(void);
 int display_locatepos(int posx, int posy);
 int display_getpos(void);
-int display_putpos(int pos);
+int display_setpos(int pos);
 int display_setattr(int attr);
 
 #endif

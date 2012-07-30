@@ -170,3 +170,35 @@ int display_setattr(int attr)
 
   return 0;
 }
+
+int display_setpos(int pos)
+{
+  struct msg_head msg;
+  int r;
+
+  if(display_queid==0) {
+    r=display_init();
+    if(r<0)
+      return r;
+  }
+
+  msg.size=sizeof(struct msg_head);
+  msg.service=DISPLAY_SRV_DISPLAY;
+  msg.command=DISPLAY_CMD_SETPOS;
+  msg.arg=pos;
+  for(;;) {
+    r=message_send(display_queid, &msg);
+    if(r!=ERRNO_OVER)
+      break;
+    syscall_wait(10);
+  }
+  if(r<0) {
+    syscall_puts("setpos sndcmd=");
+    long2hex(-r,s);
+    syscall_puts(s);
+    syscall_puts("\n");
+    return r;
+  }
+
+  return 0;
+}

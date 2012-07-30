@@ -275,7 +275,8 @@ void tst_data(void)
 
 void tst_pagefault(void)
 {
-  int *c=(int *)(0xA1000000);
+  //int *c=(int *)(0xA1000000);
+  int *c=(int *)(0x0);
 
 //  display_puts((char*)c);
 
@@ -976,7 +977,7 @@ int start(int argc, char *argv[])
 //  tst_key();
 //  tst_data();
 //  tst_pgm();
-//  tst_pagefault();
+  tst_pagefault();
 //  tst_heap();
 //  tst_heap2();
 //  tst_dir();
@@ -990,7 +991,7 @@ int start(int argc, char *argv[])
 //  tst_shm();
 //  tst_shm2();
 //  tst_mutex();
-  tst_bucket();
+//  tst_bucket();
 
   return 456;
 }
