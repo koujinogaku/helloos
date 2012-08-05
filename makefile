@@ -1,4 +1,4 @@
-TESTS= $(TESTDIR)/tstdemox.out $(TESTDIR)/tst.out $(TESTDIR)/tst2.out ##$(TESTDIR)/tstnanox.out #$(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
+TESTS= $(TESTDIR)/tst.out #$(TESTDIR)/tstdemox.out #$(TESTDIR)/tst2.out #$(TESTDIR)/tstnanox.out #$(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
 
 LOADERDIR=core/loader
 KERNELDIR=core/kernel
@@ -17,7 +17,8 @@ KERNEL=$(KERNELDIR)/kernel.sys
 SERVERS=$(SERVERDIR)/display.out $(SERVERDIR)/keyboard.out $(SERVERDIR)/command.out $(SERVERDIR)/mouse.out
 COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out $(COMMANDDIR)/free.out $(COMMANDDIR)/ps.out $(COMMANDDIR)/qs.out $(COMMANDDIR)/cls.out
 MICROWINLIB=$(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a $(MICROWINDIR)/lib/libmwnanox.a
-EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(MICROWINDIR)/nanox/nanox.out $(TESTS)
+NANOXEXECS=$(MICROWINDIR)/nanox/nanox.out $(MICROWINDIR)/demos/nanowm/nanowm.out $(MICROWINDIR)/demos/nanox/npanel.out $(MICROWINDIR)/demos/nanox/nxeyes.out
+EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(NANOXEXECS) $(TESTS)
 
 
 all: hello.img 
@@ -59,6 +60,15 @@ $(COMMANDDIR)/ps.out: $(STDLIB)
 	cd $(COMMANDDIR) && make
 
 $(MICROWINDIR)/nanox/nanox.out: $(STDLIB)
+	cd $(MICROWINDIR) && make
+
+$(MICROWINDIR)/demos/nanowm/nanowm.out: $(STDLIB) $(MICROWINDIR)/make.touch
+	cd $(MICROWINDIR) && make
+
+$(MICROWINDIR)/demos/nanox/npanel.out: $(STDLIB) $(MICROWINDIR)/make.touch
+	cd $(MICROWINDIR) && make
+
+$(MICROWINDIR)/demos/nanox/nxeyes.out: $(STDLIB) $(MICROWINDIR)/make.touch
 	cd $(MICROWINDIR) && make
 
 $(TESTDIR)/tstdemox.out: $(STDLIB) $(MICROWINDIR)/make.touch

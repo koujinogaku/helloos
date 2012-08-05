@@ -11,6 +11,8 @@
 #include "bucket.h"
 #include "environm.h"
 //#include "window.h"
+#include "math.h"
+#include "print.h"
 
 void puts(char *str)
 {
@@ -871,6 +873,225 @@ int tst_bucket()
   return 0;
 }
 
+double tst_fpu(double x,int y)
+{
+  int z;
+
+  z = (int)x;
+
+  display_puts("9.0 ");
+  if(z > 9.0)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("8.0 ");
+  if(z > 8.0)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("7.0 ");
+  if(z > 7.0)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("4.0 ");
+  if(z > 3.0)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("3.0 ");
+  if(z > 3.0)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("2.0 ");
+  if(z > 2.0)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("1.0 ");
+  if(z > 1.0)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.2 ");
+  if(z > 0.2)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.1 ");
+  if(z > 0.1)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.02 ");
+  if(z > 0.02)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.01 ");
+  if(z > 0.01)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.002 ");
+  if(z > 0.002)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.001 ");
+  if(z > 0.001)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.0002 ");
+  if(z > 0.0002)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  display_puts("0.0001 ");
+  if(z > 0.0001)
+    display_puts("High\n");
+  else
+    display_puts("Low\n");
+
+  return z;
+}
+
+int tst_int(void)
+{
+  int x;
+  char s[32];
+
+  x=-5;
+  sint2dec(x,s);
+  display_puts(s);
+  display_puts("->");
+  sint2dec((x&1),s);
+  display_puts(s);
+  display_puts("\n");
+  x = x/2;
+  sint2dec(x,s);
+  display_puts(s);
+  display_puts("->");
+  sint2dec((x&1),s);
+  display_puts(s);
+  display_puts("\n");
+  x = x/2;
+  sint2dec(x,s);
+  display_puts(s);
+  display_puts("->");
+  sint2dec((x&1),s);
+  display_puts(s);
+  display_puts("\n");
+  x = x/2;
+  sint2dec(x,s);
+  display_puts(s);
+  display_puts("->");
+  sint2dec((x&1),s);
+  display_puts(s);
+  display_puts("\n");
+
+  return 0;
+}
+
+int tst_printdouble(double val, int width)
+{
+	int minus=0,is_exp=0;
+	int exp_digit,dot_pos;
+	int digit;
+	double top_base,exp_f;
+	int i;
+
+	if(val<0) {
+		minus=1;
+		val = fabs(val);
+	}
+
+	exp_f = log10(val);
+	if(exp_f >= 0.0) {
+		dot_pos = exp_digit = (int)exp_f;
+		display_puts("exp=plus\n");
+	}
+	else {
+		dot_pos = exp_digit = ((int)exp_f)-1;
+		display_puts("exp=minus\n");
+	}
+
+	sint2dec(exp_digit,s);
+	display_puts("val_width=");
+	display_puts(s);
+	display_putc('\n');
+
+	if( exp_digit >= 0 ) {
+		if( exp_digit >= width ) {
+			is_exp = 1;
+			dot_pos = 0;
+		}
+	}
+	else {
+		if(-exp_digit <= width) {
+			exp_digit = -1;
+			dot_pos = -1;
+		}
+		else {
+			is_exp = 1;
+			dot_pos = 0;
+		}
+	}
+	top_base = bpow(10.0,exp_digit);
+
+	if(minus)
+		display_putc('-');
+	dot_pos++;
+	for(i=0; i<width; i++) {
+		if(dot_pos==0)
+			display_putc('.');
+		digit = (int)(val / top_base);
+		display_putc('0'+digit);
+		val = val - (digit*top_base);
+		top_base = top_base / 10;
+		dot_pos--;
+	}
+	if(is_exp) {
+		display_putc('e');
+		if(exp_digit>0)
+			display_putc('+');
+		sint2dec(exp_digit,s);
+		display_puts(s);
+	}
+
+	display_putc('\n');
+	return 0;
+}
+int tst_printf(void)
+{
+  double x=12.34;
+  char s[16];
+
+  //print_format("double=%f\n",x);
+  dbl2dec(x,s,9);
+  display_puts("double=");
+  display_puts(s);
+  display_puts("\n");
+
+  return 0;
+}
+
 /*
 int tst_window(void)
 {
@@ -977,7 +1198,7 @@ int start(int argc, char *argv[])
 //  tst_key();
 //  tst_data();
 //  tst_pgm();
-  tst_pagefault();
+//  tst_pagefault();
 //  tst_heap();
 //  tst_heap2();
 //  tst_dir();
@@ -992,6 +1213,11 @@ int start(int argc, char *argv[])
 //  tst_shm2();
 //  tst_mutex();
 //  tst_bucket();
+
+//tst_fpu(2.9, 2);
+//tst_int(10.9);
+//tst_printdouble(100.0 , 8);
+tst_printf();
 
   return 456;
 }

@@ -26,6 +26,7 @@
 #include "shrmem.h"
 #include "kernel.h"
 #include "kprogram.h"
+#include "fpu.h"
 
 static char s[64];
 static int kernel_queid=0;
@@ -117,6 +118,7 @@ void start(void)
   pic_init();
   timer_init();
   syscall_init();
+  fpu_init();
 
   cpu_unlock();
 

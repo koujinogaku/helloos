@@ -7,12 +7,12 @@ LD=$(TS)-ld
 AR=$(TS)-ar
 OBJDUMP=$(TS)-objdump
 CC=$(TS)-gcc
-CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(WININC)
+CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(WININC) 
 LSFILE=../core/library/appl.ls
 
 STDLIBDIR=../core/library
 STARTOBJ=$(STDLIBDIR)/startappl.o
-APPLIB=$(STDLIBDIR)/libappl.a
+APPLIB=$(STDLIBDIR)/libappl.a $(STDLIBDIR)/math/libmath.a
 MICROWINLIB=$(MICROWINDIR)/lib/libmwnanox.a # $(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a
 
 TST  =tst.o

@@ -18,6 +18,7 @@ static struct mem_freelist memfreelist;
 //static int mem_alloc_mutex=0;
 static char mem_kmem_status=0;
 static unsigned long mem_totalsize;
+static unsigned long mem_kernel_totalsize;
 
 void mem_free(void *vfreearea, unsigned long areasize)
 {
@@ -217,6 +218,10 @@ unsigned long mem_get_totalsize(void)
 {
   return mem_totalsize;
 }
+unsigned long mem_get_kernelsize(void)
+{
+  return mem_kernel_totalsize;
+}
 
 void mem_init(void)
 {
@@ -228,11 +233,13 @@ void mem_init(void)
     /* pool under 8MB */
     mem_free((void*)CFG_MEM_KERNELHEAP , CFG_MEM_KERNELHEAPSZ );
     mem_kmem_status=2;
+    mem_kernel_totalsize=CFG_MEM_KERNELHEAPSZ;
   }
   else {
     /* pool under 640KB */
     mem_free((void*)CFG_MEM_KERNELHEAP2, CFG_MEM_KERNELHEAP2SZ);
     mem_kmem_status=1;
+    mem_kernel_totalsize=CFG_MEM_KERNELHEAP2SZ;
   }
 }
 

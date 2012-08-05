@@ -1,22 +1,25 @@
 #include "stdarg.h"
 #include "print.h"
 #include "display.h"
+#include "math.h"
+#include "string.h"
 
 /*
 specifier	contents	Use case
-%d	Decimal	%d、%04d、%6d、正負数にも対応
-%x	Hexadecimal(Lower case)	%x、%04x、%6x
-%X	Hexadecimal(Capital)	%X、%04X、%6X
+%d	Decimal	%d %04d %6d
+%x	Hexadecimal(Lower case)	%x %04x %6x
+%X	Hexadecimal(Capital)	%X %04X %6X
 %c	charactor	%c
 %s	String	%s
 %%	%(Percent)Specifies the character itself	%%
 */
 
 
-static int tsprintf_string(char* ,char* );
-static int tsprintf_char(int ,char* );
-static int tsprintf_decimal(signed long,char* ,int ,int );
-static int tsprintf_hexadecimal(unsigned long ,char* ,int ,int ,int );
+static int tsprintf_string(char* str,char* buff);
+static int tsprintf_char(int ch,char* buff);
+static int tsprintf_decimal(signed long val,char* buff,int zf,int wd);
+static int tsprintf_hexadecimal(unsigned long val,char* buff, int capital,int zf,int wd);
+static int tsprintf_double(double val, char* buff, int width);
 
 int print_sformat(char* buff,const char* fmt, ...)
 {
@@ -91,6 +94,10 @@ int print_vsformat(char* buff,const char* fmt,va_list arg)
 		val = (int)va_arg(arg,char*);
                 size = tsprintf_string((char*)val,buff);
                 break;
+            case 'f':
+		val = va_arg(arg,double);
+                size = tsprintf_double(val, buff, width);
+		break;
             default:        /* other than control code */
                 /* %%(% charactor) is performed */
                 len++;
@@ -181,8 +188,7 @@ static int tsprintf_decimal(signed long val,char* buff,int zf,int wd)
 /*
   translate value to Hexadecimal
 */
-static int tsprintf_hexadecimal(unsigned long val,char* buff,
-								int capital,int zf,int wd)
+static int tsprintf_hexadecimal(unsigned long val,char* buff, int capital,int zf,int wd)
 {
 	int i;
 	char tmp[16];
@@ -251,6 +257,90 @@ static int tsprintf_string(char* str,char* buff)
 		str++;
 		count++;
 	}
+	return count;
+}
+
+/*
+  translate value to float point decimal string
+*/
+
+
+static int tsprintf_double(double val, char* buff, int width)
+{
+	int minus=0,is_exp=0;
+	int exp_digit,dot_pos;
+	int digit;
+	double top_base,exp_f;
+	int i;
+	int count=0;
+
+	if(width==0)
+		width=9;
+
+	if(val<0) {
+		minus=1;
+		val = fabs(val);
+	}
+
+	exp_f = log10(val);
+	if(exp_f >= 0.0) {
+		dot_pos = exp_digit = (int)exp_f;
+	}
+	else {
+		dot_pos = exp_digit = ((int)exp_f)-1;
+	}
+
+	if( exp_digit >= 0 ) {
+		if( exp_digit >= width ) {
+			is_exp = 1;
+			dot_pos = 0;
+		}
+	}
+	else {
+		if(-exp_digit <= (width / 2)) {
+			exp_digit = -1;
+			dot_pos = -1;
+		}
+		else {
+			is_exp = 1;
+			dot_pos = 0;
+		}
+	}
+	top_base = bpow(10.0,exp_digit);
+
+	if(minus) {
+		*(buff++) = '-';
+		count++;
+	}
+	dot_pos++;
+	for(i=0; i<width; i++) {
+		if(dot_pos==0) {
+			*(buff++) = '.';
+			count++;
+		}
+		digit = (int)(val / top_base);
+		*(buff++) = '0'+digit;
+		count++;
+		val = val - (digit*top_base);
+		top_base = top_base / 10;
+		dot_pos--;
+	}
+	if(is_exp) {
+		*(buff++) = 'e';
+		count++;
+		if(exp_digit>0) {
+			*(buff++) = '+';
+			count++;
+		}
+		sint2dec(exp_digit,buff);
+		{
+			int len;
+			len = strlen(buff);
+			buff += len;
+			count += len;
+		}
+	}
+
 	return count;
 }
 

@@ -5,12 +5,12 @@ OBJDUMP=$(TS)-objdump
 CC=$(TS)-gcc
 CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../include
 
-APPLIB=libappl.a
-APPLOBJ= syscall.o shm.o string.o keyboard.o display.o pic.o exit.o environm.o memalloc.o memcalloc.o memdebug.o memfree.o meminit.o memrealloc.o message.o mouse.o qsort.o print.o rand.o bucket.o dbgmemory.o atoi.o dbl2dec.o
+LIB=libmath.a
+OBJS= cos.o sin.o tan.o atan.o atan2.o sqrt.o fabs.o hypot.o log10.o bpow.o
 
-all: $(APPLIB) startappl.o
+all: $(LIB)
 
-$(APPLIB): $(APPLOBJ)
+$(LIB): $(OBJS)
 	rm -f $@
 	$(AR) r $@ $?
 

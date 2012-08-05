@@ -84,7 +84,7 @@ static void excp_dump(int dmpadr,int start,int end)
 void
 excp_abort( Excinfo *i, int excpno, const char *msg )
 {
-
+  int r;
   char s[10];
   //int esp;
 
@@ -97,6 +97,11 @@ excp_abort( Excinfo *i, int excpno, const char *msg )
   console_puts(" lastfunc=");
   long2hex(task_get_lastfunc(),s);
   console_puts(s);
+  console_puts(" cr0=");
+  asm volatile ("mov %%cr0, %%eax":"=a"(r):);
+  long2hex(r,s);
+  console_puts(s);
+
   console_puts("\nInfo  eflags=");
   long2hex(i->eflags,s); console_puts(s);
   console_puts(" errcode =");

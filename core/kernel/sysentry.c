@@ -384,6 +384,7 @@ int syscall_kernel_memory_status(unsigned long *status)
   if(status) {
     *status++ = mem_get_totalsize();
     *status++ = page_get_totalfree()*PAGE_PAGESIZE;
+    *status++ = mem_get_kernelsize();
     *status++ = mem_get_kernelfree();
   }
   return 0;

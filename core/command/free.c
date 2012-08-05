@@ -2,13 +2,14 @@
 #include "display.h"
 #include "string.h"
 #include "errno.h"
+#include "print.h"
 
 static char s[16];
 
 int start(int argc, char *argv[])
 {
   int r;
-  unsigned long status[4];
+  unsigned long status[5];
 
   r = syscall_kernel_memory_status(status);
 
@@ -20,20 +21,9 @@ int start(int argc, char *argv[])
     return -r;
   }
 
-  display_puts("Total Mem=");
-  int2dec(status[0]/1024,s);
-  display_puts(s);
-  display_puts("KB\n");
-
-  display_puts("Free  Mem=");
-  int2dec(status[1]/1024,s);
-  display_puts(s);
-  display_puts("KB\n");
-
-  display_puts("Kernel Free Mem=");
-  int2dec(status[2]/1024,s);
-  display_puts(s);
-  display_puts("KB\n");
+  display_puts("          total     used     free\n");
+  print_format("Total  %6dKB %6dKB %6dKB\n",status[0]/1024,(status[0]-status[1])/1024,status[1]/1024);
+  print_format("Kernel %6dKB %6dKB %6dKB\n",status[2]/1024,(status[2]-status[3])/1024,status[3]/1024);
 
   return 0;
 }

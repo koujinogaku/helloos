@@ -52,6 +52,7 @@ struct TASK {
   struct TSS tss;
   struct desc_seg gdt;
   void *stack;
+  void *fpu;
   unsigned short id;
   unsigned short status;
   unsigned short exitcode;
@@ -62,6 +63,7 @@ static int task_dispatch_on=0;
 static struct TASK *tasktbl=0;
 static unsigned short task_real_taskid=0;
 //static char s[64];
+
 
 void task_idle_process(void)
 {
@@ -93,7 +95,6 @@ void task_idle_process(void)
   }
 }
 
-
 int task_init(void)
 {
   struct desc_seg *gdt = (struct desc_seg *) CFG_MEM_GDTHEAD;
@@ -103,6 +104,7 @@ int task_init(void)
   tasktbl = (struct TASK*)mem_alloc(TASK_TBLSZ * sizeof(struct TASK));
   if(tasktbl==0)
     return ERRNO_RESOURCE;
+
 /*
 {char s[10];
 console_puts("tasktbl size=");
@@ -138,7 +140,6 @@ console_puts("\n");
 
   Asm("ltr %%ax"::"a"(DESC_SELECTOR(DESC_KERNEL_TASK)));
 
-
   idletask = task_create(task_idle_process);
   if(idletask<0)
     return idletask;
@@ -147,6 +148,7 @@ console_puts("\n");
 
   return 0;
 }
+
 
 int task_create(void *task_func)
 {
@@ -206,6 +208,7 @@ int task_create(void *task_func)
 
   desc_set_tss32(&task_new->gdt, (int)&(task_new->tss), sizeof(task_new->tss)-1, DESC_DPL_SYSTEM);
 
+  task_new->fpu = 0;
   task_new->status = TASK_STAT_STOP;
 
   cpu_hold_unlock(hold_locked);
@@ -276,6 +279,24 @@ void task_set_lastfunc( int lastfunc )
 int task_get_lastfunc(void)
 {
   return tasktbl->next->lastfunc;
+}
+
+void *task_get_fpu(int taskid)
+{
+  struct TASK *task_cur;
+  if(taskid>=TASK_TBLSZ)
+    return (void*)-1;
+  task_cur = &(tasktbl[taskid]);
+  return task_cur->fpu;
+}
+
+void task_set_fpu(int taskid,void *fpu)
+{
+  struct TASK *task_cur;
+  if(taskid>=TASK_TBLSZ)
+    return;
+  task_cur = &(tasktbl[taskid]);
+  task_cur->fpu=fpu;
 }
 
 void task_dbg_dumplist(void *lst)

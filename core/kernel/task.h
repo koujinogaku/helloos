@@ -3,6 +3,7 @@
 #include "list.h"
 
 #define TASK_TBLSZ 128
+#define TASK_FPUSZ 64
 
 
 #define TASK_STAT_NOTUSE 0
@@ -39,6 +40,8 @@ void task_dispatch_start(void);
 void task_dispatch_stop(void);
 void task_dispatch(void);
 void task_idle_process(void);
+void *task_get_fpu(int taskid);
+void task_set_fpu(int taskid,void *fpu);
 
 void task_dbg_task(void *s);
 

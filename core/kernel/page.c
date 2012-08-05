@@ -29,36 +29,36 @@ static inline void
 page_flush_cache(void)
 {
   asm volatile(
-    "mov %cr3, %eax\n"
-    "mov %eax, %cr3\n"
-      );
+    "mov %%cr3, %%eax\n"
+    "mov %%eax, %%cr3\n"
+    :::"eax"  );
 }
 //void
 static inline void
 page_paging_on(void)
 {
   asm volatile(
-    "mov %cr0, %eax\n"
-    "or  $0x80000000, %eax\n"
-    "mov %eax, %cr0"
-     );
+    "mov %%cr0, %%eax\n"
+    "or  $0x80000000, %%eax\n"
+    "mov %%eax, %%cr0"
+    :::"eax" );
 }
 //void
 static inline void
 page_paging_off(void)
 {
   asm volatile(
-    "mov %cr0, %eax\n"
-    "and $0x7fffffff, %eax\n"
-    "mov %eax, %cr0"
-     );
+    "mov %%cr0, %%eax\n"
+    "and $0x7fffffff, %%eax\n"
+    "mov %%eax, %%cr0"
+    :::"eax" );
 }
 //int
 static inline int
 page_paging_check(void)
 {
   int enabled;
-  asm volatile("mov %%cr0, %0":"=a"(enabled));
+  asm volatile("mov %%cr0, %0":"=r"(enabled));
   return enabled & 0x80000000;
 }
 

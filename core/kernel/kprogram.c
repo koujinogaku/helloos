@@ -14,6 +14,7 @@
 #include "queue.h"
 #include "cpu.h"
 #include "kmem.h"
+#include "fpu.h"
 
 #define PGM_STAT_NOTUSE 0
 #define PGM_STAT_USED   1
@@ -340,6 +341,7 @@ int program_delete(int taskid)
 {
   struct PGM *pgm;
   int exitcode;
+  void *fpu;
 
   mutex_lock(&pgm_tbl_mutex);
 
@@ -353,6 +355,9 @@ int program_delete(int taskid)
     return ERRNO_NOTEXIST;
   }
 
+  fpu=task_get_fpu(taskid);
+  if(fpu)
+    fpu_free(fpu);
   exitcode=task_delete(taskid);
 
   if(pgm->pgd!=NULL)

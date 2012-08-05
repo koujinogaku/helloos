@@ -195,9 +195,13 @@ int program_delete(int pgmid)
   }
 
   for(i=0;i<PGM_TASKIDSZ;i++)
-    if(pgm->taskid[i]!=0)
+    if(pgm->taskid[i]!=0) {
+      void *fpu;
+      fpu=task_get_fpu(taskid);
+      if(fpu)
+        fpu_free(fpu);
       exitcode=task_delete(pgm->taskid[i]);
-  
+    }
   for(i=0;i<PGM_SHMIDSZ;i++)
     if(pgm->shmid[i]!=0)
       exitcode=shm_delete(pgm->taskid[i]);

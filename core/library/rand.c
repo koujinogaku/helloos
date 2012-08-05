@@ -1,4 +1,4 @@
-#include <rand.h>
+#include "rand.h"
 
 static long holdrand;
 
