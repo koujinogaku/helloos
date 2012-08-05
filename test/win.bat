@@ -1,3 +1,5 @@
+cls
 mouse &
 nanox &
-tstdemox
+nanowm &
+npanel

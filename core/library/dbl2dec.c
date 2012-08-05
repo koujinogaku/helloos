@@ -18,7 +18,11 @@ int dbl2dec(double val, char* buff, int width)
 		val = fabs(val);
 	}
 
-	exp_f = log10(val);
+	if(val==0.0)
+		exp_f = 0.0;
+	else
+		exp_f = log10(val);
+
 	if(exp_f >= 0.0) {
 		dot_pos = exp_digit = (int)exp_f;
 	}

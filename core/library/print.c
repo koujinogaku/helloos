@@ -19,7 +19,9 @@ static int tsprintf_string(char* str,char* buff);
 static int tsprintf_char(int ch,char* buff);
 static int tsprintf_decimal(signed long val,char* buff,int zf,int wd);
 static int tsprintf_hexadecimal(unsigned long val,char* buff, int capital,int zf,int wd);
+#ifdef PRINT_FLOAT
 static int tsprintf_double(double val, char* buff, int width);
+#endif
 
 int print_sformat(char* buff,const char* fmt, ...)
 {
@@ -94,10 +96,12 @@ int print_vsformat(char* buff,const char* fmt,va_list arg)
 		val = (int)va_arg(arg,char*);
                 size = tsprintf_string((char*)val,buff);
                 break;
+#ifdef PRINT_FLOAT
             case 'f':
 		val = va_arg(arg,double);
                 size = tsprintf_double(val, buff, width);
 		break;
+#endif
             default:        /* other than control code */
                 /* %%(% charactor) is performed */
                 len++;
@@ -260,11 +264,13 @@ static int tsprintf_string(char* str,char* buff)
 	return count;
 }
 
+
+
 /*
   translate value to float point decimal string
 */
 
-
+#ifdef PRINT_FLOAT
 static int tsprintf_double(double val, char* buff, int width)
 {
 	int minus=0,is_exp=0;
@@ -282,7 +288,11 @@ static int tsprintf_double(double val, char* buff, int width)
 		val = fabs(val);
 	}
 
-	exp_f = log10(val);
+	if(val==0.0)
+		exp_f = 0.0;
+	else
+		exp_f = log10(val);
+
 	if(exp_f >= 0.0) {
 		dot_pos = exp_digit = (int)exp_f;
 	}
@@ -343,4 +353,4 @@ static int tsprintf_double(double val, char* buff, int width)
 
 	return count;
 }
-
+#endif

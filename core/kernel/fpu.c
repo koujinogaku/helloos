@@ -95,6 +95,7 @@ int fpu_init(void)
   void *fputmpl;
   int r;
 
+  // Check Math Co-Processor
   asm volatile(
     "mov %%cr0, %0"
     :"=r"(r):

@@ -1080,7 +1080,7 @@ int tst_printdouble(double val, int width)
 }
 int tst_printf(void)
 {
-  double x=12.34;
+  double x=0.0;
   char s[16];
 
   //print_format("double=%f\n",x);
@@ -1092,6 +1092,14 @@ int tst_printf(void)
   return 0;
 }
 
+float tst_float(float a, float b)
+{
+  float c;
+
+  c = a*b;
+
+  return c;
+}
 /*
 int tst_window(void)
 {
@@ -1217,8 +1225,14 @@ int start(int argc, char *argv[])
 //tst_fpu(2.9, 2);
 //tst_int(10.9);
 //tst_printdouble(100.0 , 8);
-tst_printf();
-
+//tst_printf();
+{
+  int i;
+  i = tst_float(2.9, 3.9);
+  sint2dec(i,s);
+  display_puts(s);
+  display_puts("\n");
+}
   return 456;
 }
 

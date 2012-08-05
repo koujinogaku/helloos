@@ -14,6 +14,7 @@
 
 #define sprintf   print_sformat
 #define vsprintf  print_vsformat
+#define printf    print_format
 #define free(m)   mfree(m)
 #define getpid()  environment_getqueid()
 #define strcpy(dest,src)  strncpy(dest,src,1024)
