@@ -68,6 +68,8 @@ static BUCKET **dsctbl=0;
 
 static int  *smtx=0;
 static char *hctl=0;
+static int alarm_command=BUCKET_ALARM_COMMAND;
+
 
 void *bucket_malloc(unsigned long size)
 {
@@ -264,12 +266,13 @@ int bucket_send(int dsc, void *buffer, int size)
   return rc;
 }
 
-int bucket_select(void)
+int bucket_select(unsigned long timeout)
 {
   struct bucket_dsc *dscp;
   union  bucket_msg bucketmsg;
   int selected=0;
   int rc;
+  int timeout_alarm=0;
 
   rc=bucket_init();
   if(rc<0)
@@ -304,10 +307,28 @@ int bucket_select(void)
       return BUCKET_SELECT_DATA;
 
   if(rc==0) {
+    if(timeout!=0) {
+      for(;;) {
+        selected_msg.size=sizeof(struct msg_head);
+        rc=message_receive(MESSAGE_MODE_TRY, MSG_SRV_ALARM, alarm_command, &selected_msg);
+        if(rc<0)
+          break;
+      }
+      timeout_alarm = syscall_alarm_set(timeout/10,environment_getqueid(), alarm_command<<16);
+    }
     selected_msg.size=sizeof(struct msg_head);
     rc=message_poll(MESSAGE_MODE_WAIT, 0, 0, &selected_msg);
     if(rc<0)
       return rc;
+    if(timeout!=0) {
+      if(selected_msg.service==MSG_SRV_ALARM && selected_msg.command==alarm_command) {
+        selected_msg.size=sizeof(struct msg_head);
+        rc=message_receive(MESSAGE_MODE_TRY, MSG_SRV_ALARM, alarm_command, &selected_msg);
+      }
+      else {
+        syscall_alarm_unset(timeout_alarm,environment_getqueid());
+      }
+    }
   }
 
   list_for_each(dsctbl[0],dscp) {
@@ -325,8 +346,12 @@ int bucket_select(void)
 
   if(selected)
     return BUCKET_SELECT_DATA;
-  else
-    return BUCKET_SELECT_MSG;
+  else {
+    if(selected_msg.service==MSG_SRV_ALARM && selected_msg.command==alarm_command)
+      return 0; // timeout
+    else
+      return BUCKET_SELECT_MSG;
+  }
 }
 
 void *bucket_selected_msg(void)

@@ -291,7 +291,12 @@ fdc_wait_intr(void)
     return ERRNO_NOTINIT;
 
   if(msg.service==MSG_SRV_KERNEL && msg.command==MSG_CMD_KRN_INTERRUPT && msg.arg==PIC_IRQ_FDC) {
-    alarm_unset(a);
+    if(alarm_unset(a, fdc_intr_qid)<0) {  // delete alarm
+      msg.size=sizeof(msg);               // when received double message
+      r = queue_tryget(fdc_intr_qid,&msg);
+      if(r<0)
+        return ERRNO_NOTINIT;
+    }
 //    fdc_intr_cnt=0;
     return 0; // success
   }
@@ -585,12 +590,12 @@ floppy_write_sector( byte drive, void *buf, unsigned int sector, unsigned int co
     memcpy( fdc_dma_buffer, buf + i*FDC_SECSIZE, FDC_SECSIZE );
 
     /* setup DMA channel 2 */
-    BEGIN_CPULOCK;
+    BEGIN_CPULOCK();
     dma_disable(2);
     dma_set_area(2, (unsigned int)fdc_dma_buffer, FDC_SECSIZE-1);
     dma_set_mode(2, DMA_MODE_READ | DMA_MODE_SINGLE | DMA_MODE_INCL);
     dma_enable(2);
-    END_CPULOCK;
+    END_CPULOCK();
 
     /* seek */
     if( (r=fdc_cmd_seek(drive, h, c))<0 )
@@ -626,12 +631,12 @@ floppy_read_sector( byte drive, void *buf, unsigned int sector, unsigned int cou
     s = (sector + i) % FDC_SECPTRK + 1;
 
     /* setup DMA channel 2 */
-    BEGIN_CPULOCK;
+    BEGIN_CPULOCK();
     dma_disable(2);
     dma_set_area(2, (unsigned int)fdc_dma_buffer, FDC_SECSIZE-1);
     dma_set_mode(2, DMA_MODE_WRITE | DMA_MODE_SINGLE | DMA_MODE_INCL);
     dma_enable(2);
-    END_CPULOCK;
+    END_CPULOCK();
 
     /* seek */
     if( (r=fdc_cmd_seek(drive, h, c))<0)

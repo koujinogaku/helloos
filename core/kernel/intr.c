@@ -24,12 +24,12 @@ intr_init(void)
 void
 intr_define( unsigned int n, unsigned int addr, int dpl )
 {
-  BEGIN_CPULOCK
+  BEGIN_CPULOCK();
 
   struct desc_gate *idt = (void*)CFG_MEM_IDTHEAD;
   desc_set_gate( &idt[n], DESC_SELECTOR(DESC_KERNEL_CODE), addr, DESC_GATE_INTR32, dpl );
 
-  END_CPULOCK
+  END_CPULOCK();
 }
 
 

@@ -6,7 +6,7 @@ int start(int argc, char *argv[])
 
   display_setpos(0);
 
-  for(i=0;i<100;i++)
+  for(i=0;i<120;i++)
     //            01234567890123456789
     display_puts("                    ");
 

@@ -59,8 +59,8 @@ struct app_info {
 	char		app_id[10];
 	char		app_path[64];
 } Apps[] = {
-	{"nxeyes", "nxeyes.out"},
-	{"clock", "bin/nxclock"},
+	{"xeyes", "nxeyes.out"},
+	{"clock", "nxclock.out"},
 	{"term", "bin/nterm"},
 	{"demo2", "bin/demo2"},
 	{"ntest", "bin/ntest"},

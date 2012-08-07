@@ -70,12 +70,12 @@ cpu_has_locked(void)
     cpu_unlock();		\
 }
 
-#define BEGIN_CPULOCK\
+#define BEGIN_CPULOCK()\
   {\
     bool hold_locked;\
     cpu_hold_lock(hold_locked);
 
-#define END_CPULOCK\
+#define END_CPULOCK()\
     cpu_hold_unlock(hold_locked);\
   }
 

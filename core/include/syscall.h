@@ -106,7 +106,7 @@ int syscall_file_readdir(unsigned long *vdirdesc, char *dirent);
 int syscall_file_closedir(unsigned long *vdirdesc);
 int syscall_kernel_get_bios_info(char *binfo);
 int syscall_alarm_set(unsigned int alarmtime, int queid, int arg);
-int syscall_alarm_unset(int alarmid);
+int syscall_alarm_unset(int alarmid, int queid);
 int syscall_kernel_memory_status(unsigned long *status);
 
 

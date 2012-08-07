@@ -188,7 +188,7 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
     eax = syscall_alarm_set((unsigned int)ebx, ecx, edx);
     break;
   case SYSCALL_FN_ALARM_UNSET:
-    eax = syscall_alarm_unset(ebx);
+    eax = syscall_alarm_unset(ebx, ecx);
     break;
   case SYSCALL_FN_KERNEL_MEMORY_STATUS:
     eax = syscall_kernel_memory_status((unsigned long *)ebx);
@@ -375,9 +375,9 @@ int syscall_alarm_set(unsigned int alarmtime, int queid, int arg)
 {
   return alarm_set(alarmtime, queid, arg);
 }
-int syscall_alarm_unset(int alarmid)
+int syscall_alarm_unset(int alarmid, int queid)
 {
-  return alarm_unset(alarmid);
+  return alarm_unset(alarmid, queid);
 }
 int syscall_kernel_memory_status(unsigned long *status)
 {

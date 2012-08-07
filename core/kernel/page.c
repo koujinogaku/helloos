@@ -109,7 +109,7 @@ void page_free(void *vpageaddr)
   list_add_tail(&page_freelist,pageaddr);
   END_PAGINGOFF;
 */
-  BEGIN_CPULOCK;
+  BEGIN_CPULOCK();
   pgd=page_get_pgd();
   page_flush_cache();
   page_map_vpage(pgd,pagewindow,pageaddr,(PAGE_TYPE_RDWR|PAGE_TYPE_USER));
@@ -117,7 +117,7 @@ void page_free(void *vpageaddr)
   page_freelist.next = pageaddr;
   page_unmap_vpage(pgd,pagewindow);
   page_flush_cache();
-  END_CPULOCK;
+  END_CPULOCK();
 /*
   console_puts("[pfree=");
   long2hex((unsigned int)pageaddr,s);
@@ -140,7 +140,7 @@ void *page_alloc(void)
   list_del(pageaddr);
   END_PAGINGOFF;
 */
-  BEGIN_CPULOCK;
+  BEGIN_CPULOCK();
   pgd=page_get_pgd();
   pageaddr = page_freelist.next;
   page_map_vpage(pgd,pagewindow,pageaddr,(PAGE_TYPE_RDWR|PAGE_TYPE_USER));
@@ -148,7 +148,7 @@ void *page_alloc(void)
   page_freelist.next=pagewindow->next;
   page_unmap_vpage(pgd,pagewindow);
   page_flush_cache();
-  END_CPULOCK;
+  END_CPULOCK();
 /*
   console_puts("[palloc=");
   long2hex((unsigned int)pageaddr,s);
@@ -625,12 +625,12 @@ page_memcpy(void *pgd, void *dest, void *src, unsigned int size)
 {
   void *orgpgd;
 
-  BEGIN_CPULOCK;
+  BEGIN_CPULOCK();
   orgpgd = (void*)page_get_pgd();
   page_set_pgd(pgd);
   memcpy(dest,src,size);
   page_set_pgd(orgpgd);
-  END_CPULOCK;
+  END_CPULOCK();
 
   return dest;
 }

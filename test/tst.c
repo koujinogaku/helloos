@@ -590,13 +590,26 @@ void tst_dsp(void)
 
 int tst_alarm(void)
 {
-  int i;
+  int i,rc;
+  int alarm;
+  struct msg_head selected_msg;
 
   for(i=0;i<10;i++) {
     display_puts("*");
     syscall_wait(50);
   }
   display_puts("\n");
+
+  for(i=0;i<10;i++) {
+    display_puts("*");
+    alarm = syscall_alarm_set(50,environment_getqueid(),0x00010000);
+    selected_msg.size=sizeof(selected_msg);
+    rc=message_poll(MESSAGE_MODE_WAIT, 0, 0, &selected_msg);
+    rc=message_receive(MESSAGE_MODE_TRY, 0, 0, &selected_msg);
+  }
+  display_puts("\n");
+
+
   return 0;
 }
 
@@ -788,7 +801,7 @@ int tst_bucket()
   }
 
   display_puts("wait accepting in select...");
-  rc=bucket_select();
+  rc=bucket_select(1000);
   if(rc<0) {
     display_puts("select error=");
     int2dec(-rc,s);
@@ -796,6 +809,12 @@ int tst_bucket()
     display_puts("\n");
     return 1;
   }
+  if(rc==0) {
+    display_puts("timeout waiting be connected\n");
+    bucket_close(fd);
+    return 0;
+  }
+
   display_puts("selected type=");
   int2dec(rc,s);
   display_puts(s);
@@ -816,7 +835,7 @@ int tst_bucket()
   j=0;
 
     display_puts("receiving(server)...");
-    rc=bucket_select();
+    rc=bucket_select(100);
     if(rc<0) {
       display_puts("select error=");
       int2dec(-rc,s);
@@ -825,6 +844,14 @@ int tst_bucket()
       return 1;
     }
     display_puts("\n");
+
+  if(rc==0) {
+    display_puts("timeout waiting receive from client\n");
+    bucket_shutdown(cli);
+    bucket_close(cli);
+    bucket_close(fd);
+    return 0;
+  }
 
   while(j<5) {
     rc=bucket_recv(cli, buffer, 2);
@@ -1220,19 +1247,13 @@ int start(int argc, char *argv[])
 //  tst_shm();
 //  tst_shm2();
 //  tst_mutex();
-//  tst_bucket();
-
+  tst_bucket();
 //tst_fpu(2.9, 2);
 //tst_int(10.9);
 //tst_printdouble(100.0 , 8);
 //tst_printf();
-{
-  int i;
-  i = tst_float(2.9, 3.9);
-  sint2dec(i,s);
-  display_puts(s);
-  display_puts("\n");
-}
+//tst_float(2.9, 3.9);
+
   return 456;
 }
 

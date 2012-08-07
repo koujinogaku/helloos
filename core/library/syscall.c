@@ -288,10 +288,10 @@ int syscall_alarm_set(unsigned int alarmtime, int queid, int arg)
   SYSCALL_3(SYSCALL_FN_ALARM_SET, r, alarmtime, queid, arg);
   return r;
 }
-int syscall_alarm_unset(int alarmid)
+int syscall_alarm_unset(int alarmid, int queid)
 {
   int r=0;
-  SYSCALL_1(SYSCALL_FN_ALARM_UNSET, r, alarmid);
+  SYSCALL_2(SYSCALL_FN_ALARM_UNSET, r, alarmid, queid);
   return r;
 }
 int syscall_kernel_memory_status(unsigned long *status)

@@ -31,7 +31,7 @@ void console_write_pallet( int start, int end, char *pallet )
 {
 	int i;
 
-BEGIN_CPULOCK
+BEGIN_CPULOCK();
 	cpu_out8(VGA_DAC_WRITE_INDEX, start);
 	for (i = start; i <= end; i++) {
 		cpu_out8(VGA_DAC_DATA, (pallet[0] >> 2) & 0x3f);
@@ -39,7 +39,7 @@ BEGIN_CPULOCK
 		cpu_out8(VGA_DAC_DATA, (pallet[2] >> 2) & 0x3f);
 		pallet += 3;
 	}
-END_CPULOCK
+END_CPULOCK();
 
 }
 void console_init_pallet(char *pallet)

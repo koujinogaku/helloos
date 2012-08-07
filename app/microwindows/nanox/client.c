@@ -861,7 +861,7 @@ GrMainLoop(GR_FNCALLBACKEVENT fncb)
 		FD_ZERO(&rfds);
 #if HELLOOS
 		GrPrepareSelect(&setsize, 0);
-		if(bucket_select() > 0)
+		if(bucket_select(0) > 0)
 			GrServiceSelect(0, fncb);
 #else
 		GrPrepareSelect(&setsize, &rfds);
@@ -1021,7 +1021,7 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 #endif
 
 #if HELLOOS
-	if((e = bucket_select())>0)
+	if((e = bucket_select(timeout))>0)
 #else
 	if((e = select(setsize+1, &rfds, NULL, NULL, timeout ? &to : NULL))>0)
 #endif

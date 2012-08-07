@@ -76,14 +76,15 @@ int alarm_set(unsigned int alarmtime, int queid, int cmd_arg)
 
   /* Use new alarm as a list */
   alarm_new = &(alarmtbl[i]);
-  alarm_new->time=systime+(TIMER_SYSTIME_TYPE)alarmtime;
+  timer_add(&systime,alarmtime);
+  alarm_new->time=systime;
   alarm_new->queid=queid;
   alarm_new->arg=cmd_arg;
   alarm_new->status=ALARM_STAT_RUN;
 
   /* Insert to alarm list by chronological order */
   list_for_each(alarmtbl,list) {
-    if(alarm_new->time < list->time) {
+    if(timer_compare(&(alarm_new->time), &(list->time) )<0) {
       list_insert_prev(list,alarm_new);
       break;
     }
@@ -95,14 +96,14 @@ int alarm_set(unsigned int alarmtime, int queid, int cmd_arg)
   mutex_unlock(&alarm_tbl_mutex);
   return i;  /* alarmid */
 }
-int alarm_unset(int alarmid)
+int alarm_unset(int alarmid, int queid)
 {
   struct alarm *alm;
 
   mutex_lock(&alarm_tbl_mutex);
 
   alm = &(alarmtbl[alarmid]);
-  if(alm->status==ALARM_STAT_NOTUSE) {
+  if(alm->status==ALARM_STAT_NOTUSE || alm->queid != queid) {
     mutex_unlock(&alarm_tbl_mutex);
     return ERRNO_NOTEXIST;
   }
@@ -165,7 +166,7 @@ void alarm_check(void)
   timer_get_systime(&systime);
 
   list_for_each(alarmtbl,list) {
-    if(systime >= list->time) {
+    if(timer_compare(&systime ,&(list->time))>=0) {
       queid=list->queid;
       cmd_arg=list->arg;
       list_del(list);

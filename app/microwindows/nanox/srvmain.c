@@ -730,7 +730,7 @@ GsSelect(GR_TIMEOUT timeout)
 #endif /* MW_FEATURE_TIMERS */
 
 	/* Wait for some input on any of the fds in the set or a timeout: */
-	r=bucket_select();
+	r=bucket_select(0);
 	msg=bucket_selected_msg();
 	if(r<0) {
 		EPRINTF("select() call in main failed\n");

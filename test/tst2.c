@@ -296,7 +296,7 @@ int tst_bucket()
   j=0;
   while(j<5) {
     display_puts("receiving(client)...");
-    rc=bucket_select();
+    rc=bucket_select(0);
     if(rc<0) {
       display_puts("select error=");
       int2dec(-rc,s);

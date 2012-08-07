@@ -10,17 +10,43 @@
 #include "console.h"
 #include "string.h"
 
-#define TIMER_PIT_CTRL	0x0043
-#define TIMER_PIT_CNT0	0x0040
+#define TIMER_PIT_ADDR_CNT0 0x40
+#define TIMER_PIT_ADDR_CNT1 0x41
+#define TIMER_PIT_ADDR_CNT2 0x42
+#define TIMER_PIT_ADDR_CTRL 0x43
 
-static TIMER_SYSTIME_TYPE timer_systime_counter=0;
+// value mode
+#define TIMER_PIT_CNT_BIN 0x00
+#define TIMER_PIT_CNT_BCD 0x01
+// counter mode
+#define TIMER_PIT_MODE_0 0x00 // terminal count
+#define TIMER_PIT_MODE_1 0x02 // programable one shot
+#define TIMER_PIT_MODE_2 0x04 // rate generator
+#define TIMER_PIT_MODE_3 0x06 // square generator
+#define TIMER_PIT_MODE_4 0x08 // software triggerstrobe
+#define TIMER_PIT_MODE_5 0x0A // hardware triggerstrobe
+// counter access mode
+#define TIMER_PIT_ACC_16  0x30 // 16 bit read load
+#define TIMER_PIT_ACC_8H  0x20 // 8 high bit read load
+#define TIMER_PIT_ACC_8L  0x10 // 8 low  bit read load
+#define TIMER_PIT_ACC_LAT 0x00 // 8 low  bit read load
+// counter channel
+#define TIMER_PIT_CNL_CNT0 0x00 // counter 0
+#define TIMER_PIT_CNL_CNT1 0x40 // counter 1
+#define TIMER_PIT_CNL_CNT2 0x80 // counter 2
+#define TIMER_PIT_CNL_RBC  0xC0 // read back command
+
+
+static TIMER_SYSTIME_TYPE timer_systime_counter;
 
 
 //#pragma interrupt
 INTR_INTERRUPT(timer_intr);
 void timer_intr(void)
 {
-  timer_systime_counter++;
+  timer_systime_counter.low++;
+  if(timer_systime_counter.low==0)
+    timer_systime_counter.high++;
 
   pic_eoi(PIC_IRQ_TIMER);	/* notify "Reception completion" to PIC */
 /*
@@ -43,26 +69,72 @@ void timer_intr(void)
   return;
 }
 
+// Set timer counter
+//   counter -> 0xffff = 54.9msec
+//   counter -> 0x0001 =  0.000838msec = 0.838micro-sec
+int timer_set_counter(int counter)
+{
+  cpu_out8(TIMER_PIT_ADDR_CTRL, TIMER_PIT_CNL_CNT0|TIMER_PIT_ACC_16|TIMER_PIT_MODE_2|TIMER_PIT_CNT_BIN );  /*     0x34     */
+  cpu_out8(TIMER_PIT_ADDR_CNT0, (counter & 0xff) );
+  cpu_out8(TIMER_PIT_ADDR_CNT0, (counter >> 8)   );
+
+  return 0;
+}
+
 void timer_init(void)
 {
+  // 1193180 / 1.19318MHz =   1 sec  --> overflow for 16bit
+  // 119318  / 1.19318MHz = 100msec  --> overflow for 16bit
+  // 59659   / 1.19318MHz =  50msec
+  // 11932   / 1.19318MHz =  10msec
+  // 1193    / 1.19318MHz =   1msec
+  // 119     / 1.19318MHz = 100micro-sec
+  int counter = 11932; 
+
   intr_define(0x20+PIC_IRQ_TIMER, INTR_INTR_ENTRY(timer_intr),INTR_DPL_SYSTEM);
 
-  cpu_out8(TIMER_PIT_CTRL, 0x34);  /*          */
-  cpu_out8(TIMER_PIT_CNT0, 0x9c);  /* 10msec   */
-  cpu_out8(TIMER_PIT_CNT0, 0x2e);  /*          */
+  timer_set_counter(counter);
 
-  timer_systime_counter=0;
+  memset(&timer_systime_counter,0,sizeof(timer_systime_counter));
   return;
 }
 
 void timer_enable(void)
 {
-	pic_enable(PIC_IRQ_TIMER);	/* Allow PIT(TIMER) */
+  pic_enable(PIC_IRQ_TIMER);	/* Allow PIT(TIMER) */
 }
 
 void timer_get_systime(TIMER_SYSTIME_TYPE *systime)
 {
-	*systime = timer_systime_counter;
+  *systime = timer_systime_counter;
 }
 
+void timer_add(TIMER_SYSTIME_TYPE *systime, int delta)
+{
+  unsigned long tmp;
 
+  tmp = systime->low;
+  if(delta > 0) {
+    systime->low += delta;
+    if(tmp > systime->low)
+      systime->high ++;
+  }
+  else {
+    systime->low += delta;
+    if(tmp < systime->low)
+      systime->high --;
+  }
+}
+
+int timer_compare(TIMER_SYSTIME_TYPE *time1, TIMER_SYSTIME_TYPE *time2)
+{
+  if(time1->high > time2->high)
+    return 1;
+  if(time1->high < time2->high)
+    return -1;
+  if(time1->low > time2->low)
+    return 1;
+  if(time1->low < time2->low)
+    return -1;
+  return 0;
+}

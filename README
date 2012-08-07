@@ -15,7 +15,6 @@ Install:
 - Copy the hello.img as a virtual floppy disk to a virtual machine.
 - Boot the Hello OS from virtual floppy disk.
 
-
 Run Demo:
 - Run win.bat
 - Click mouse on any place. You can see the demo.
@@ -29,6 +28,7 @@ Other Commands on command line:
 - CLS              - Clear screen.
 - PS               - List running programs.
 - QS               - List created message queues.
+- DATE             - Show the system time.
 - [FileName]       - Run a program file that name is *.out or *.bat.
 
 
@@ -44,4 +44,17 @@ Program detail:
 - Use a Command line interface basically.
 - A window manager can be invoked from the command line that is still under development.
 
+
+System Requirements:
+- Booting from a floppy disk or virtual floppy disk.
+- IBM-PC or Emulators.
+   - VWMare Player
+   - VirtualBox Player
+   - Microsoft Virtual PC 2007 SP1
+
+
+Development Environment:
+- MinGW / msys
+- GCC 4.2.2 Terget: i386-elf
+..... I know, that is too old.
 
