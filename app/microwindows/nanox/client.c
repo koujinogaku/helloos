@@ -439,7 +439,7 @@ GrClose(void)
 	signal(SIGALRM, oldSignalHandler);
 #endif
 #if HELLOOS
-	bucket_shutdown(nxSocket);
+	//bucket_shutdown(nxSocket);
 	bucket_close(nxSocket);
 #else
 	close(nxSocket);

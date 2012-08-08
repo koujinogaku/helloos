@@ -207,14 +207,13 @@ int command_exec(int argc, char *argv[])
     return r;
   }
 
-  return 0;
+  return taskid;
 }
 
-int command_wait(tryflg)
+int command_wait(int *exitcode, int tryflg)
 {
   struct msg_head msg;
   int taskid;
-  int exitcode;
   int r;
 
   msg.size=sizeof(msg);
@@ -231,16 +230,19 @@ int command_wait(tryflg)
   }
 
   taskid=msg.arg;
-  exitcode = syscall_pgm_delete(taskid);
-  if(exitcode<0) {
+  r = syscall_pgm_delete(taskid);
+  if(r<0) {
     display_puts("wait del error=");
-    int2dec(-exitcode,s);
+    int2dec(-r,s);
     display_puts(s);
     display_puts("\n");
-    return exitcode;
+    return r;
   }
 
-  return exitcode;
+  if(exitcode!=0)
+    *exitcode=r;
+
+  return taskid;
 }
 
 int command_builtin(int argc, char *argv[])
@@ -305,6 +307,19 @@ int command_batch_open(int argc, char *argv[])
   return 0;
 }
 
+void commmand_show_termination(int taskid, int exitcode)
+{
+  if(exitcode==0)
+    return;
+
+  display_puts("Task [");
+  int2dec(taskid,s);
+  display_puts(s);
+  display_puts("] exit(");
+  int2dec(exitcode,s);
+  display_puts(s);
+  display_puts(")\n");
+}
 
 int start(void)
 {
@@ -314,8 +329,8 @@ int start(void)
   int len;
 //  int i;
   int r;
-  int exitcode;
-  int bg;
+  int exitcode,taskid,exittaskid;
+  int is_background;
 
   display_puts("hello world\n");
 
@@ -331,12 +346,9 @@ int start(void)
       break;
     }
 
-    exitcode=command_wait(MESSAGE_MODE_TRY);
-    if(exitcode>0) {
-      display_puts("program terminate exitcode=");
-      int2dec(exitcode,s);
-      display_puts(s);
-      display_puts("\n");
+    taskid=command_wait(&exitcode,MESSAGE_MODE_TRY);
+    if(taskid>0) {
+      commmand_show_termination(taskid, exitcode);
     }
 /*
     display_puts("command=[");
@@ -365,31 +377,32 @@ int start(void)
       continue;
 
     if(strncmp(argv[argc-1],"&",2)==0) {
-      bg=1;
+      is_background=1;
       argc--;
       if(argc<=0)
         continue;
     }
     else {
-      bg=0;
+      is_background=0;
     }
 
     r=command_builtin(argc, argv);
     if(r==0)
       continue;
 
-    r=command_exec(argc, argv);
-    if(r==0) {
+    taskid=command_exec(argc, argv);
+    if(taskid>0) {
 
-      if(bg==1)
+      if(is_background)
         continue;
 
-      exitcode=command_wait(MESSAGE_MODE_WAIT);
-      if(exitcode>0) {
-        display_puts("program terminate exitcode=");
-        int2dec(exitcode,s);
-        display_puts(s);
-        display_puts("\n");
+      for(;;) {
+        exittaskid=command_wait(&exitcode, MESSAGE_MODE_WAIT);
+        if(exittaskid>=0) {
+          commmand_show_termination(exittaskid, exitcode);
+        }
+        if(exittaskid==taskid)
+          break;
       }
       continue;
     }

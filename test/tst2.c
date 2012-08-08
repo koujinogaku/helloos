@@ -7,6 +7,7 @@
 #include "memory.h"
 #include "bucket.h"
 #include "environm.h"
+#include "message.h"
 //#include "window.h"
 
 void puts(char *str)
@@ -334,6 +335,31 @@ syscall_wait(100);
   return 0;
 }
 
+int tst_alarm(void)
+{
+  int i,rc;
+  int alarm;
+  struct msg_head selected_msg;
+
+  for(i=0;i<10;i++) {
+    display_puts("@");
+    syscall_wait(50);
+  }
+  display_puts("\n");
+
+  for(i=0;i<10;i++) {
+    display_puts("@");
+    alarm = syscall_alarm_set(50,environment_getqueid(),0x00010000);
+    selected_msg.size=sizeof(selected_msg);
+    rc=message_poll(MESSAGE_MODE_WAIT, 0, 0, &selected_msg);
+    rc=message_receive(MESSAGE_MODE_TRY, 0, 0, &selected_msg);
+  }
+  display_puts("\n");
+
+
+  return 0;
+}
+
 
 /*
 int tst_window(void)
@@ -422,11 +448,12 @@ int start()
 //  tst_console();
 //  tst_que();
 //  tst_key();
+  tst_alarm();
 //  tst_window();
 //  tst_shm();
 //  tst_shm2();
 //  tst_mutex();
-  tst_bucket();
+//  tst_bucket();
 
   return 789;
 }

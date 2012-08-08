@@ -25,6 +25,7 @@
 #include "memory.h"
 #include "print.h"
 #include "environm.h"
+#include "message.h"
 
 #define MWINCLUDECOLORS
 #include "nano-X.h"
@@ -93,6 +94,17 @@ GR_COORD	move_yoff;
  * Reap the dead children whenever we get a SIGCHLD.
  */
 //static void reaper(int signum) { while(waitpid(WAIT_ANY, NULL, WNOHANG) > 0); }
+static void reaper(void)
+{
+  struct msg_head msg;
+  int r;
+
+  msg.size=sizeof(msg);
+  r = message_receive(MESSAGE_MODE_TRY, MSG_SRV_KERNEL, MSG_CMD_KRN_EXIT, &msg);
+  if(r<0)
+    return;
+  syscall_pgm_delete(msg.arg);
+}
 
 int
 start(int argc,char **argv)
@@ -164,6 +176,7 @@ start(int argc,char **argv)
 
 	while (1) {
 		GrGetNextEvent(&event);
+		reaper();
 
 		switch (event.type) {
 			case GR_EVENT_TYPE_EXPOSURE:

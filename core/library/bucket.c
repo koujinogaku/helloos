@@ -288,6 +288,7 @@ int bucket_select(unsigned long timeout)
         return rc;
       else {
         memcpy(&(dscp->last_msg),&bucketmsg, min(sizeof(union bucket_msg),bucketmsg.h.size));
+        memcpy(&selected_msg,(&dscp->last_msg),sizeof(selected_msg));
         dscp->pos=0;
         dscp->have_block=1;
         selected=1;
@@ -295,6 +296,7 @@ int bucket_select(unsigned long timeout)
     }
     else {
       selected=1;
+      memcpy(&selected_msg,(&dscp->last_msg),sizeof(selected_msg));
     }
   }
 
@@ -492,7 +494,7 @@ int bucket_shutdown(int dsc)
 
 int bucket_close(int dsc)
 {
-  int rc;
+  //int rc;
 
   if(dsc<=0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
@@ -503,9 +505,9 @@ int bucket_close(int dsc)
     bucket_mfree(dsctbl[dsc]->last_msg.n.block);
   }
 
-  rc=bucket_shutdown(dsc);
-  if(rc<0)
-    return rc;
+  //rc=bucket_shutdown(dsc);
+  //if(rc<0)
+  //  return rc;
 
   list_del(dsctbl[dsc]);
   mfree(dsctbl[dsc]);

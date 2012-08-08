@@ -1238,7 +1238,7 @@ int start(int argc, char *argv[])
 //  tst_heap2();
 //  tst_dir();
 //  tst_dsp();
-//  tst_alarm();
+  tst_alarm();
 //  tst_args(argc,argv);
 //  tst_mouse();
 //  tst_usermsg();
@@ -1247,7 +1247,7 @@ int start(int argc, char *argv[])
 //  tst_shm();
 //  tst_shm2();
 //  tst_mutex();
-  tst_bucket();
+//  tst_bucket();
 //tst_fpu(2.9, 2);
 //tst_int(10.9);
 //tst_printdouble(100.0 , 8);

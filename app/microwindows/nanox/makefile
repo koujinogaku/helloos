@@ -28,7 +28,7 @@ $(LIBCLI): $(OBJSCLI) makefile
 	$(AR) r $@ $?
 	ranlib $@
 
-nanox.out: $(OBJSSRV)
+nanox.out: $(OBJSSRV) $(LIBNANOXSRV) $(APPLIB) $(STARTOBJ)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(OBJSSRV) $(LIBNANOXSRV) $(APPLIB) -o $@
 
 %.a: %.o
