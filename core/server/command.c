@@ -13,7 +13,6 @@
 #define COMMAND_BUFFSZ     512
 
 static char s[10];
-static char command_batch_args[COMMAND_LINESIZE+1];
 static int  command_batch_filep=0;
 static char command_readbuf[COMMAND_BUFFSZ];
 static int  command_bufpoint=COMMAND_BUFFSZ;
@@ -148,11 +147,9 @@ int command_split(char *cmdline, int len, char *argv[])
 int command_exec(int argc, char *argv[])
 {
   static char pgmname[COMMAND_PGMNAMEMAX];
-  int len,n,i;
-  int r;
+  int len;
   int taskid;
-  int queid;
-  char userargs[COMMAND_LINESIZE+1];
+  char *session;
 
   len=strlen(argv[0]);
   if(len>=COMMAND_PGMNAMEMAX-6) {
@@ -166,45 +163,18 @@ int command_exec(int argc, char *argv[])
   display_puts("]\n");
 */
 
-  r=syscall_pgm_load(pgmname, SYSCALL_PGM_TYPE_VGA|SYSCALL_PGM_TYPE_IO);
-  if(r==ERRNO_NOTEXIST) {
-    return r;
-  }
-  if(r<0) {
-    display_puts("load error=");
-    int2dec(-r,s);
+  session=environment_copy_session();
+  environment_make_args(session, argc, argv);
+  taskid = environment_exec(pgmname, session);
+  mfree(session);
+  if(taskid==ERRNO_NOTEXIST)
+    return taskid;
+  if(taskid<0) {
+    display_puts("exec error error=");
+    int2dec(-taskid,s);
     display_puts(s);
     display_puts("\n");
-    return r;
-  }
-  taskid=r;
-
-  n=0;
-  memset(userargs,0,COMMAND_LINESIZE+1);
-  for(i=0;i<argc;i++) {
-    len=strlen(argv[i]);
-    strncpy(&userargs[n],argv[i],COMMAND_LINESIZE-n);
-    n=n+len+1;
-    if(n>=COMMAND_LINESIZE)
-      break;
-  }
-  r = syscall_pgm_setargs(taskid, userargs, n);
-  if(r<0) {
-    display_puts("setargs error=");
-    int2dec(-r,s);
-    display_puts(s);
-    display_puts("\n");
-    return r;
-  }
-
-  queid = environment_getqueid();
-  r=syscall_pgm_start(taskid, queid);
-  if(r<0) {
-    display_puts("start error=");
-    int2dec(-r,s);
-    display_puts(s);
-    display_puts("\n");
-    return r;
+    return taskid;
   }
 
   return taskid;
@@ -212,35 +182,19 @@ int command_exec(int argc, char *argv[])
 
 int command_wait(int *exitcode, int tryflg)
 {
-  struct msg_head msg;
   int taskid;
-  int r;
 
-  msg.size=sizeof(msg);
-  r=message_receive(tryflg, MSG_SRV_KERNEL, MSG_CMD_KRN_EXIT, &msg);
-  if(r==ERRNO_OVER)
-    return r;
+  taskid=environment_wait(exitcode, tryflg);
+  if(taskid==ERRNO_OVER)
+    return taskid;
 
-  if(r<0) {
-    display_puts("wait que error=");
-    int2dec(-r,s);
+  if(taskid<0) {
+    display_puts("wait error=");
+    int2dec(-taskid,s);
     display_puts(s);
     display_puts("\n");
-    return r;
+    return taskid;
   }
-
-  taskid=msg.arg;
-  r = syscall_pgm_delete(taskid);
-  if(r<0) {
-    display_puts("wait del error=");
-    int2dec(-r,s);
-    display_puts(s);
-    display_puts("\n");
-    return r;
-  }
-
-  if(exitcode!=0)
-    *exitcode=r;
 
   return taskid;
 }
@@ -258,7 +212,7 @@ int command_builtin(int argc, char *argv[])
 
 int command_batch_open(int argc, char *argv[])
 {
-  int r,i,n,len;
+  int r,len;
   static char pgmname[COMMAND_PGMNAMEMAX];
 
   len=strlen(argv[0]);
@@ -289,16 +243,6 @@ int command_batch_open(int argc, char *argv[])
       command_batch_filep=0;
       return r;
     }
-  }
-
-  n=0;
-  memset(command_batch_args,0,COMMAND_LINESIZE+1);
-  for(i=0;i<argc;i++) {
-    len=strlen(argv[i]);
-    strncpy(&command_batch_args[n],argv[i],COMMAND_LINESIZE-n);
-    n=n+len+1;
-    if(n>=COMMAND_LINESIZE)
-      break;
   }
 
   command_batch_filep=r;
@@ -332,7 +276,7 @@ int start(void)
   int exitcode,taskid,exittaskid;
   int is_background;
 
-  display_puts("hello world\n");
+  display_puts("Hello World\n");
 
   for(;;) {
     display_puts("o(^^)o>");

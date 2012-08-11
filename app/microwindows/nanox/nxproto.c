@@ -96,7 +96,7 @@ nxWriteSocket(char *buf, int todo)
 			if ( errno == EAGAIN || errno == EINTR )
 				continue;
 #endif
-			EPRINTF("nxFlushReq: write failed: %m\n");
+			EPRINTF("nxFlushReq: write failed: %d\n",written);
 			exit(1);
 		}
 		buf += written;

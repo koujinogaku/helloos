@@ -13,6 +13,8 @@ int program_start(int taskid, int exitque);
 int program_delete(int taskid);
 int program_get_exitque(int taskid);
 int program_exitevent(struct msg_head *msg);
+int program_set_taskque(int queid);
+int program_get_taskque(int taskid);
 int program_list(int start, int count, struct kmem_program *plist);
 
 #endif

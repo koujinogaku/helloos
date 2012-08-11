@@ -157,6 +157,12 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
   case SYSCALL_FN_PGM_DELETE:
     eax = syscall_pgm_delete(ebx);
     break;
+  case SYSCALL_FN_PGM_SETTASKQ:
+    eax = syscall_pgm_settaskq(ebx);
+    break;
+  case SYSCALL_FN_PGM_GETTASKQ:
+    eax = syscall_pgm_gettaskq(ebx);
+    break;
   case SYSCALL_FN_PGM_LIST:
     eax = syscall_pgm_list(ebx, ecx, (void*)edx);
     break;
@@ -334,6 +340,15 @@ int syscall_pgm_delete(int taskid)
 {
   return program_delete(taskid);
 }
+int syscall_pgm_settaskq(int queid)
+{
+  return program_set_taskque(queid);
+}
+int syscall_pgm_gettaskq(int taskid)
+{
+  return program_get_taskque(taskid);
+}
+
 int syscall_pgm_list(int start, int count, void *plist)
 {
   return program_list(start, count, plist);

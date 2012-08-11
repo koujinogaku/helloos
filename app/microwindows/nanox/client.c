@@ -804,6 +804,7 @@ GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 #endif
 	int		fd;
 	GR_EVENT 	ev;
+	struct	msg_head *msg;
 
 	ACCESS_PER_THREAD_DATA()
 	LOCK(&nxGlobalLock);
@@ -827,8 +828,19 @@ GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 			CheckErrorEvent(&ev);
 			fncb(&ev);
 		}
+#if HELLOOS
+		else {
+			msg = bucket_selected_msg();
+			if(msg->service!=MSG_SRV_ALARM) {
+				ev.type = GR_EVENT_TYPE_FDINPUT;
+				ev.fdinput.fd = msg->service;
+				fncb(&ev);
+			}
+		}
+#endif
 	}
 
+#if !HELLOOS
 	/* check for input on registered file descriptors */
 	for (fd = 0; fd < regfdmax; fd++) {
 		if (FD_ISSET(fd, &regfdset) && FD_ISSET(fd, rfds)) {
@@ -837,6 +849,7 @@ GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 			fncb(&ev);
 		}
 	}
+#endif
 	UNLOCK(&nxGlobalLock);
 }
 
@@ -998,7 +1011,7 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 	int		setsize = 0;
 	int		e;
 	ACCESS_PER_THREAD_DATA()
-
+	struct msg_head	*msg;
 
 	FD_ZERO(&rfds);
 	/*
@@ -1026,7 +1039,7 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 	if((e = select(setsize+1, &rfds, NULL, NULL, timeout ? &to : NULL))>0)
 #endif
 	{
-		int fd;
+		//int fd;
 
 		if(FD_ISSET(nxSocket, &rfds)) {
 			/*
@@ -1039,6 +1052,11 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 			return;
 		}
 
+#if HELLOOS
+		msg=bucket_selected_msg();
+		ep->type = GR_EVENT_TYPE_FDINPUT;
+		ep->fdinput.fd = msg->service;
+#else
 		/* check for input on registered file descriptors */
 		for (fd = 0; fd < regfdmax; fd++) {
 			if (FD_ISSET(fd, &regfdset) && FD_ISSET(fd, &rfds)) {
@@ -1047,6 +1065,7 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 				break;
 			}
 		}
+#endif
 	}
 	else if (e == 0) {
 		/*

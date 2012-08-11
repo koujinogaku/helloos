@@ -8,6 +8,7 @@ struct kmem_program
   unsigned short taskid;
   unsigned short exitque;
   void *pgd;
+  unsigned short taskque;
   char pgmname[8];
 };
 

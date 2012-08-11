@@ -9,6 +9,7 @@
 #include "errno.h"
 #include "environm.h"
 #include "display.h"
+#include "stdlib.h"
 
 #define min(a, b)       (a) < (b) ? a : b
 
@@ -92,6 +93,12 @@ static inline int message_match(unsigned short srv, unsigned short cmd, struct m
   return 1;
 }
 
+static void message_checksigterm(struct msg_head *msg)
+{
+  if(msg->service==MSG_SRV_KERNEL && msg->command==MSG_CMD_KRN_SIGTERM)
+    exit(0);
+}
+
 int message_poll(int tryflg, int srv, int cmd, void *vmsgret)
 {
   struct msg_list *msgctl;
@@ -134,6 +141,7 @@ int message_poll(int tryflg, int srv, int cmd, void *vmsgret)
       mfree(msg);
       return r;
     }
+    message_checksigterm(msg);
     msgctl=malloc(sizeof(struct msg_list));
     if(msgctl==NULL) {
       return ERRNO_RESOURCE;
@@ -198,6 +206,7 @@ display_puts("]");
       mfree(msg);
       return r;
     }
+    message_checksigterm(msg);
     if(message_match(srv,cmd,msg)) {
 /*
 int2dec(msgret->size,s);

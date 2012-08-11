@@ -743,10 +743,10 @@ GsSelect(GR_TIMEOUT timeout)
 			continue;
 		}
 	}
-	if(kbddev.Poll()) {
-		/* If data is present on the keyboard fd, service it: */
-		while(GsCheckKeyboardEvent())
-			continue;
+
+	/* If data is present on the keyboard fd, service it: */
+	while(kbddev.Poll()) {
+		GsCheckKeyboardEvent();
 	}
 
 	if(r==BUCKET_SELECT_DATA) {

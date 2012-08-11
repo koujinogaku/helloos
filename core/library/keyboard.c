@@ -5,6 +5,7 @@
 #include "display.h"
 #include "environm.h"
 #include "message.h"
+#include "config.h"
 
 static unsigned short kbd_queid=0;
 static char s[10];
@@ -16,6 +17,10 @@ int keyboard_init(void)
 {
   int r;
 
+  if(kbd_queid != 0)
+    return 0;
+
+  kbd_queid = environment_get_keyboard((void*)CFG_MEM_USERARGUMENT);
   if(kbd_queid != 0)
     return 0;
 
@@ -34,6 +39,7 @@ int keyboard_init(void)
       return r;
     }
     kbd_queid = r;
+    environment_make_keyboard((void*)CFG_MEM_USERARGUMENT, kbd_queid);
     break;
   }
 /*

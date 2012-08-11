@@ -5,6 +5,9 @@
 #include "kmem.h"
 #include "memory.h"
 
+#include "config.h"
+#include "environm.h"
+
 #define PLIST_SIZE 64
 
 
@@ -22,7 +25,7 @@ int start(int argc, char *argv[])
 
   num = syscall_pgm_list(0,PLIST_SIZE,plist);
 
-  display_puts("ID   ST TASK EXTQ PGDADDR  NAME\n");
+  display_puts("ID   ST TASK TSKQ EXTQ PGDADDR  NAME\n");
   for(i=0;i<num;i++) {
     word2hex(plist[i].id,strbuf);
     display_puts(strbuf);
@@ -33,6 +36,10 @@ int start(int argc, char *argv[])
     display_putc(' ');
 
     word2hex(plist[i].taskid,strbuf);
+    display_puts(strbuf);
+    display_putc(' ');
+
+    word2hex(plist[i].taskque,strbuf);
     display_puts(strbuf);
     display_putc(' ');
 

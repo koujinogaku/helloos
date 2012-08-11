@@ -52,6 +52,8 @@
 #define SYSCALL_FN_MTX_UNLOCK    43
 #define SYSCALL_FN_PGM_LIST      44
 #define SYSCALL_FN_QUE_LIST      45
+#define SYSCALL_FN_PGM_SETTASKQ  46
+#define SYSCALL_FN_PGM_GETTASKQ  47
 
 void syscall_init(void);
 
@@ -92,6 +94,8 @@ int syscall_pgm_load(char *filename, int type);
 int syscall_pgm_setargs(int taskid, char *args, int argsize);
 int syscall_pgm_start(int taskid, int exitque);
 int syscall_pgm_delete(int taskid);
+int syscall_pgm_settaskq(int queid);
+int syscall_pgm_gettaskq(int taskid);
 int syscall_pgm_list(int start, int count, void *plist);
 
 #define SYSCALL_FILE_O_RDONLY 0x0001

@@ -4,6 +4,7 @@
 #include "display.h"
 #include "environm.h"
 #include "message.h"
+#include "config.h"
 
 static unsigned short display_queid=0;
 static char s[10];
@@ -12,6 +13,10 @@ int display_init(void)
 {
   int r;
 
+  if(display_queid != 0)
+    return 0;
+
+  display_queid = environment_get_display((void*)CFG_MEM_USERARGUMENT);
   if(display_queid != 0)
     return 0;
 
@@ -29,6 +34,7 @@ int display_init(void)
       return r;
     }
     display_queid = r;
+    environment_make_display((void*)CFG_MEM_USERARGUMENT, display_queid);
     break;
   }
 /*
@@ -132,7 +138,10 @@ syscall_puts(s);
     syscall_puts(" qid=");
     int2dec(display_queid,s);
     syscall_puts(s);
+    syscall_puts(" str=");
+    syscall_puts(chr);
     syscall_puts("\n");
+
     return r;
   }
 

@@ -222,6 +222,18 @@ int syscall_pgm_delete(int taskid)
   SYSCALL_1(SYSCALL_FN_PGM_DELETE, r, taskid);
   return r;
 }
+int syscall_pgm_settaskq(int queid)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_PGM_SETTASKQ, r, queid);
+  return r;
+}
+int syscall_pgm_gettaskq(int taskid)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_PGM_GETTASKQ, r, taskid);
+  return r;
+}
 int syscall_pgm_list(int start, int count, void *plist)
 {
   int r=0;

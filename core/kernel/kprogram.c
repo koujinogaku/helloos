@@ -27,6 +27,7 @@ struct PGM {
   unsigned short taskid;
   unsigned short exitque;
   void *pgd;
+  unsigned short taskque;
   char pgmname[8];
 };
 
@@ -50,6 +51,7 @@ struct PGM *pgm_alloc(void)
   pgm->id=pgm_idx;
   pgm->taskid=0;
   pgm->exitque=0;
+  pgm->taskque=0;
   pgm->pgd=0;
 
   list_add(pgmtbl,pgm)
@@ -404,6 +406,32 @@ int program_exitevent(struct msg_head *msg)
 
   return -1;
 }
+
+int program_set_taskque(int queid)
+{
+  struct PGM *pgm;
+  int taskid;
+
+  taskid = task_get_currentid();
+  pgm=pgm_find(taskid);
+  if(pgm==NULL) {
+    return ERRNO_NOTEXIST;
+  }
+  pgm->taskque=queid;
+  return 0;
+}
+
+int program_get_taskque(int taskid)
+{
+  struct PGM *pgm;
+
+  pgm=pgm_find(taskid);
+  if(pgm==NULL) {
+    return ERRNO_NOTEXIST;
+  }
+  return pgm->taskque;
+}
+
 int program_list(int start, int count, struct kmem_program *plist)
 {
   struct PGM *pgm;
@@ -417,6 +445,7 @@ int program_list(int start, int count, struct kmem_program *plist)
       plist->status = pgm->status;
       plist->taskid = pgm->taskid;
       plist->exitque = pgm->exitque;
+      plist->taskque = pgm->taskque;
       plist->pgd = pgm->pgd;
       strncpy(plist->pgmname,pgm->pgmname,sizeof(plist->pgmname));
       plist++;

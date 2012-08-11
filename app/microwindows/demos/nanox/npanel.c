@@ -62,7 +62,7 @@ struct app_info {
 } Apps[] = {
 	{"xeyes", "nxeyes.out"},
 	{"clock", "nxclock.out"},
-	{"term", "bin/nterm"},
+	{"term", "nterm.out"},
 	{"demo2", "bin/demo2"},
 	{"ntest", "bin/ntest"},
 	{"", ""}
@@ -341,9 +341,10 @@ do_buttondown(GR_EVENT_BUTTON *ep)
 {
 	mwin *	mwp;
 	static int app_no;
-	char userargs[COMMAND_LINESIZE+1];
-	int r,taskid,queid;
+	char *userargs;
+	int r,taskid,queid,n;
 	char s[16];
+	char *argv[2];
 
 	if (ep->wid == w1) {
 		app_no = ep->y / fheight;
@@ -362,9 +363,12 @@ do_buttondown(GR_EVENT_BUTTON *ep)
 			return;
 		}
 
-		memset(userargs,0,COMMAND_LINESIZE+1);
-		strncpy(userargs,Apps[app_no].app_path,COMMAND_LINESIZE);
-		r = syscall_pgm_setargs(taskid, userargs, COMMAND_LINESIZE);
+		argv[0]=Apps[app_no].app_path;
+		argv[1]="";
+		userargs=environment_copy_session();
+		n = environment_get_session_size();
+		environment_make_args(userargs, 2, argv);
+		r = syscall_pgm_setargs(taskid, userargs, n);
 		if(r<0) {
 			display_puts("setargs error=");
 			int2dec(-r,s);
@@ -372,6 +376,7 @@ do_buttondown(GR_EVENT_BUTTON *ep)
 			display_puts("\n");
 			return;
 		}
+		mfree(userargs);
 
 		queid = environment_getqueid();
 		r=syscall_pgm_start(taskid, queid);

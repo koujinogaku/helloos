@@ -17,7 +17,6 @@
 /**
  * Write error message to stderr stream.
  */
-static char s[32];
 
 int
 GdError(const char *format, ...)

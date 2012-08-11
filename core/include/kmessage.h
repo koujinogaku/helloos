@@ -18,6 +18,6 @@ struct msg_head {
 
 #define MSG_CMD_KRN_INTERRUPT 0x0001
 #define MSG_CMD_KRN_EXIT      0x0002
-
+#define MSG_CMD_KRN_SIGTERM   0x0003
 
 #endif
