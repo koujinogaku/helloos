@@ -29,7 +29,7 @@
 #include "fpu.h"
 
 static char s[64];
-static int kernel_queid=0;
+int kernel_queid=0;
 
 static struct bios_info bios_info;
 static char vesa_info[512];

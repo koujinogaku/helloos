@@ -25,17 +25,17 @@ int start(int argc, char *argv[])
 
   num = syscall_pgm_list(0,PLIST_SIZE,plist);
 
-  display_puts("ID   ST TASK TSKQ EXTQ PGDADDR  NAME\n");
+  display_puts("ID   TASK STAT TSKQ EXTQ PGDADDR  NAME\n");
   for(i=0;i<num;i++) {
     word2hex(plist[i].id,strbuf);
     display_puts(strbuf);
     display_putc(' ');
 
-    byte2hex(plist[i].status,strbuf);
+    word2hex(plist[i].taskid,strbuf);
     display_puts(strbuf);
     display_putc(' ');
 
-    word2hex(plist[i].taskid,strbuf);
+    word2hex(plist[i].status,strbuf);
     display_puts(strbuf);
     display_putc(' ');
 

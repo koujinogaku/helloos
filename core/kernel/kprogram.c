@@ -16,6 +16,8 @@
 #include "kmem.h"
 #include "fpu.h"
 
+extern int kernel_queid;
+
 #define PGM_STAT_NOTUSE 0
 #define PGM_STAT_USED   1
 
@@ -54,7 +56,7 @@ struct PGM *pgm_alloc(void)
   pgm->taskque=0;
   pgm->pgd=0;
 
-  list_add(pgmtbl,pgm)
+  list_add_tail(pgmtbl,pgm)
 
   return pgm;
 }
@@ -98,6 +100,8 @@ int pgm_delete(int taskid)
 
 int program_init(void)
 {
+  struct PGM *pgm;
+
   pgmtbl = mem_alloc(PGM_TBLSZ * sizeof(struct PGM));
   if(pgmtbl==0)
     return ERRNO_RESOURCE;
@@ -111,6 +115,16 @@ console_puts("\n");
 */
   memset(pgmtbl,0,PGM_TBLSZ * sizeof(struct PGM));
   list_init(pgmtbl);
+
+  pgm=pgm_alloc();
+  pgm->taskid=1;
+  pgm->pgd=task_get_pgd(pgm->taskid);
+  pgm->taskque=kernel_queid;
+  strncpy(pgm->pgmname,"[Kernel]",8);
+  pgm=pgm_alloc();
+  pgm->taskid=2;
+  pgm->pgd=task_get_pgd(pgm->taskid);
+  strncpy(pgm->pgmname,"[Idle]",8);
   return 0;
 }
 
@@ -442,8 +456,8 @@ int program_list(int start, int count, struct kmem_program *plist)
   {
     if(i>=start) {
       plist->id = pgm->id;
-      plist->status = pgm->status;
       plist->taskid = pgm->taskid;
+      plist->status = task_get_status(pgm->taskid);
       plist->exitque = pgm->exitque;
       plist->taskque = pgm->taskque;
       plist->pgd = pgm->pgd;

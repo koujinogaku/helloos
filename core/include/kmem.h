@@ -4,8 +4,8 @@
 struct kmem_program
 {
   unsigned short id;
-  unsigned short status;
   unsigned short taskid;
+  unsigned short status;
   unsigned short exitque;
   void *pgd;
   unsigned short taskque;

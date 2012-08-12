@@ -271,6 +271,12 @@ int task_get_status(int taskid)
   task_cur = &(tasktbl[taskid]);
   return task_cur->status;
 }
+void *task_get_pgd(int taskid)
+{
+  struct TASK *task_cur;
+  task_cur = &(tasktbl[taskid]);
+  return (void*)task_cur->tss.cr3;
+}
 
 void task_set_lastfunc( int lastfunc )
 {
