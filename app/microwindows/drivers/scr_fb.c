@@ -90,7 +90,7 @@ fb_open(PSD psd)
 	assert(status < 2);
 
 	/* locate and open framebuffer, get info*/
-	if(syscall_kernel_get_bios_info((char *)&info) < 0) {
+	if(syscall_krn_get_bios_info((char *)&info) < 0) {
 		EPRINTF("Error reading screen info: %m\n");
 			goto fail;
 	}

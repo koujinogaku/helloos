@@ -33,7 +33,7 @@
 
 #define MW_FEATURE_IMAGES 0		/* =1 to enable GdLoadImage* / GdDrawImage* */
 
-#define MW_FEATURE_TIMERS 0		/* =1 to include MWTIMER support */
+#define MW_FEATURE_TIMERS 1		/* =1 to include MWTIMER support */
 
 /* determine compiler capability for handling EPRINTF/DPRINTF macros*/
 #define MW_FEATURE_GDERROR	1		/* use GdError for errors*/
@@ -915,7 +915,7 @@ void	set_ts_origin(int x, int y);
 #define GdItemAddr(p,type,list)	((type *)((long)p - MWITEM_OFFSET(type,list)))
 
 #if MW_FEATURE_TIMERS
-#include <sys/time.h>
+#include "time.h"
 
 typedef void (*MWTIMERCB)(void *);
 

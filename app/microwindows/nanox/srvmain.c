@@ -699,6 +699,10 @@ GsSelect(GR_TIMEOUT timeout)
 {
 	int r;
 	struct msg_head *msg;
+	unsigned long timeout_for_select;
+#if MW_FEATURE_TIMERS
+	struct timeval tout;
+#endif /* MW_FEATURE_TIMERS */
 
 	/* Set up requester for use in the main message_receive(): */
 	r=keyboard_request_key();
@@ -718,19 +722,21 @@ GsSelect(GR_TIMEOUT timeout)
 	/* Set up the timeout for the main select(): */
 	if (timeout == (GR_TIMEOUT) -1L) {
 		/* poll*/
-		tout.tv_sec = 0;
-		tout.tv_usec = 0;
-		to = &tout;
+		timeout_for_select=1;
 	} else {
-		if(GdGetNextTimeout(&tout, timeout) == TRUE)
-			to = &tout;
-		else
-			to = NULL;
+		if(GdGetNextTimeout(&tout, timeout) == TRUE) {
+			timeout_for_select = tout.tv_sec*1000 + tout.tv_usec/1000;
+		}
+		else {
+			timeout_for_select=0;
+		}
 	}
+#else
+	timeout_for_select=0;
 #endif /* MW_FEATURE_TIMERS */
 
 	/* Wait for some input on any of the fds in the set or a timeout: */
-	r=bucket_select(0);
+	r=bucket_select(timeout_for_select);
 	msg=bucket_selected_msg();
 	if(r<0) {
 		EPRINTF("select() call in main failed\n");
@@ -772,7 +778,7 @@ GsSelect(GR_TIMEOUT timeout)
 		}
 	}
 #if MW_FEATURE_TIMERS
-	else {
+	else if(r==0) {
 		GdTimeout();
 	}
 #endif

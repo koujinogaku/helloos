@@ -21,9 +21,13 @@ struct timeval {
   suseconds_t tv_usec;
 };
 
-int time_get_date(struct clock_datetime_set* datetime_set);
-unsigned long time_trans_unixtime(struct clock_datetime_set* datetime_set);
-int gettimeofday(struct timeval *systime);
+struct timezone {
+  int tz_minuteswest;
+  int tz_dsttime;
+};
+
+unsigned long time_trans_unixtime(struct tm* datetime_set);
+int gettimeofday(struct timeval *systime, struct timezone *tz);
 time_t time(time_t *timer);
 struct tm *gmtime(time_t *timer);
 struct tm *localtime(time_t *timer);

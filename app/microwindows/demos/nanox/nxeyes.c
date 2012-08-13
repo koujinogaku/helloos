@@ -44,6 +44,8 @@
 #define BLINK_MAX_OPEN_TIME 8000
 #define MAX_EYE_MOVEMENT 10
 
+#define MW_FEATURE_TIMERS 1
+
 typedef struct {
 	GR_WINDOW_ID wid;
 	GR_GC_ID gc;
@@ -176,7 +178,6 @@ void start_blink_timer(nxeyes_state *state)
 	if(state->eyes_closed) time = BLINK_CLOSED_TIME;
 	else time = (rand() % (BLINK_MAX_OPEN_TIME - BLINK_MIN_OPEN_TIME)) +
 		BLINK_MIN_OPEN_TIME;
-
 	state->tid = GrCreateTimer(state->wid, time); /*, GR_FALSE); */
 }
 

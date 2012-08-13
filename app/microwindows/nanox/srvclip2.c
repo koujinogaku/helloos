@@ -6,8 +6,8 @@
  *
  * DYNAMICREGIONS GsSetClipWindow
  */
-#include <stdio.h>
-#include <stdlib.h>
+#include "string.h"
+
 #include "serv.h"
 
 /*

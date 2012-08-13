@@ -81,7 +81,7 @@ int time_init(void)
   return 0;
 }
 
-int gettimeofday(struct timeval *systime)
+int gettimeofday(struct timeval *systime, struct timezone *tz)
 {
   struct kmem_systime now;
   int r;
@@ -101,6 +101,11 @@ int gettimeofday(struct timeval *systime)
   else {
     systime->tv_usec = (TIME_SYSTIME_RESO - ((init_systime.low - now.low)%TIME_SYSTIME_RESO))*(1000/TIME_SYSTIME_RESO)*1000;
     systime->tv_sec  = now.high - init_systime.high - ( 1+ ((init_systime.low - now.low)/TIME_SYSTIME_RESO)) + init_unixtime;
+  }
+
+  if(tz!=0) {
+    tz->tz_minuteswest=-(TIME_ZONE_ADJ/60);
+    tz->tz_dsttime=0;
   }
 
   return 0;
