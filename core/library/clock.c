@@ -67,7 +67,7 @@ int clock_get_date(struct clock_datetime_set* datetime_set)
     buff[sel].tm_sec  = clock_read(CLOCK_RTC_CMD_SEC);
     buff[sel].tm_min  = clock_read(CLOCK_RTC_CMD_MINUTE);
     buff[sel].tm_hour = clock_read(CLOCK_RTC_CMD_HOUR);
-    buff[sel].tm_wday = clock_read(CLOCK_RTC_CMD_WEEK); // Dirty data
+    //buff[sel].tm_wday = clock_read(CLOCK_RTC_CMD_WEEK); // Dirty data
     buff[sel].tm_mday = clock_read(CLOCK_RTC_CMD_DAY);
     buff[sel].tm_mon  = clock_read(CLOCK_RTC_CMD_MONTH);
     buff[sel].tm_year = clock_read(CLOCK_RTC_CMD_YEAR);
@@ -100,3 +100,4 @@ int clock_get_date(struct clock_datetime_set* datetime_set)
 
   return 0;
 }
+

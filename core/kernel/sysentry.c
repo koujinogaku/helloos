@@ -19,6 +19,7 @@
 #include "kmemory.h"
 #include "mutex.h"
 #include "kmem.h"
+#include "timer.h"
 
 extern int syscall_entry_intr(void);
 
@@ -187,17 +188,20 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
   case SYSCALL_FN_FILE_DIRCLOSE:
     eax = syscall_file_closedir((unsigned long *)ebx);
     break;
-  case SYSCALL_FN_KERNEL_GET_BIOS_INFO:
-    eax = syscall_kernel_get_bios_info((char *)ebx);
+  case SYSCALL_FN_KRN_GET_BIOS_INFO:
+    eax = syscall_krn_get_bios_info((char *)ebx);
+    break;
+  case SYSCALL_FN_KRN_MEMORY_STATUS:
+    eax = syscall_krn_memory_status((unsigned long *)ebx);
+    break;
+  case SYSCALL_FN_KRN_GET_SYSTIME:
+    eax = syscall_krn_get_systime((void *)ebx);
     break;
   case SYSCALL_FN_ALARM_SET:
     eax = syscall_alarm_set((unsigned int)ebx, ecx, edx);
     break;
   case SYSCALL_FN_ALARM_UNSET:
     eax = syscall_alarm_unset(ebx, ecx);
-    break;
-  case SYSCALL_FN_KERNEL_MEMORY_STATUS:
-    eax = syscall_kernel_memory_status((unsigned long *)ebx);
     break;
   case SYSCALL_FN_MTX_LOCK:
     eax = syscall_mtx_lock((int *)ebx);
@@ -382,19 +386,13 @@ int syscall_file_closedir(unsigned long *vdirdesc)
 {
   return fat_close_dir(vdirdesc);
 }
-int syscall_kernel_get_bios_info(char *binfo)
+
+int syscall_krn_get_bios_info(char *binfo)
 {
   return kernel_get_bios_info(binfo);
 }
-int syscall_alarm_set(unsigned int alarmtime, int queid, int arg)
-{
-  return alarm_set(alarmtime, queid, arg);
-}
-int syscall_alarm_unset(int alarmid, int queid)
-{
-  return alarm_unset(alarmid, queid);
-}
-int syscall_kernel_memory_status(unsigned long *status)
+
+int syscall_krn_memory_status(unsigned long *status)
 {
   if(status) {
     *status++ = mem_get_totalsize();
@@ -403,6 +401,21 @@ int syscall_kernel_memory_status(unsigned long *status)
     *status++ = mem_get_kernelfree();
   }
   return 0;
+}
+
+int syscall_krn_get_systime(void *systime)
+{
+  timer_get_systime((void *)systime);
+  return 0;
+}
+
+int syscall_alarm_set(unsigned int alarmtime, int queid, int arg)
+{
+  return alarm_set(alarmtime, queid, arg);
+}
+int syscall_alarm_unset(int alarmid, int queid)
+{
+  return alarm_unset(alarmid, queid);
 }
 
 int syscall_mtx_lock(int *mutex)

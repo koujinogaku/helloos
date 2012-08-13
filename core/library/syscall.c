@@ -288,10 +288,22 @@ int syscall_file_closedir(unsigned long *vdirdesc)
   SYSCALL_1(SYSCALL_FN_FILE_DIRCLOSE, r, vdirdesc);
   return r;
 }
-int syscall_kernel_get_bios_info(char *binfo)
+int syscall_krn_get_bios_info(char *binfo)
 {
   int r=0;
-  SYSCALL_1(SYSCALL_FN_KERNEL_GET_BIOS_INFO, r, binfo);
+  SYSCALL_1(SYSCALL_FN_KRN_GET_BIOS_INFO, r, binfo);
+  return r;
+}
+int syscall_krn_memory_status(unsigned long *status)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_KRN_MEMORY_STATUS, r, status);
+  return r;
+}
+int syscall_krn_get_systime(void *systime)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_KRN_GET_SYSTIME, r, systime);
   return r;
 }
 int syscall_alarm_set(unsigned int alarmtime, int queid, int arg)
@@ -304,12 +316,6 @@ int syscall_alarm_unset(int alarmid, int queid)
 {
   int r=0;
   SYSCALL_2(SYSCALL_FN_ALARM_UNSET, r, alarmid, queid);
-  return r;
-}
-int syscall_kernel_memory_status(unsigned long *status)
-{
-  int r=0;
-  SYSCALL_1(SYSCALL_FN_KERNEL_MEMORY_STATUS, r, status);
   return r;
 }
 int syscall_mtx_lock(int *mutex)

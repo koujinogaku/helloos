@@ -23,4 +23,10 @@ struct kmem_queue
   short numwait;
 };
 
+struct kmem_systime
+{
+  unsigned long low;
+  unsigned long high;
+};
+
 #endif /* KMEM_H */

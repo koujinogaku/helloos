@@ -11,7 +11,7 @@ int start(int argc, char *argv[])
   int r;
   unsigned long status[5];
 
-  r = syscall_kernel_memory_status(status);
+  r = syscall_krn_memory_status(status);
 
   if(r<0) {
     display_puts("error=");

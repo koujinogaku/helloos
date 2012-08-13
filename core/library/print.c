@@ -127,8 +127,8 @@ int print_vsformat(char* buff,const char* fmt,va_list arg)
 static int tsprintf_decimal(signed long val,char* buff,int zf,int wd)
 {
 	int i;
-	char tmp[16];
-	char* ptmp = &tmp[15];
+	char tmp[20];
+	char* ptmp = &tmp[19];
 	int len = 0;
 	int minus = 0;
 
@@ -145,7 +145,7 @@ static int tsprintf_decimal(signed long val,char* buff,int zf,int wd)
 		}
 		while (val){
 			/* for buffer under flow */
-			if (len >= 8){
+			if (len >= 11){
 				break;
 			}
 	

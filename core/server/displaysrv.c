@@ -337,7 +337,7 @@ void display_init_pallet(char *pallet)
 int display_setup(void)
 {
   struct bios_info binfo;
-  syscall_kernel_get_bios_info((char *)&binfo);
+  syscall_krn_get_bios_info((char *)&binfo);
   int pos;
 
   display_vmode = binfo.vmode;

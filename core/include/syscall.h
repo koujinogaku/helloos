@@ -43,10 +43,10 @@
 #define SYSCALL_FN_FILE_DIROPEN  34
 #define SYSCALL_FN_FILE_DIRREAD  35
 #define SYSCALL_FN_FILE_DIRCLOSE 36
-#define SYSCALL_FN_KERNEL_GET_BIOS_INFO 37
+#define SYSCALL_FN_KRN_GET_BIOS_INFO 37
 #define SYSCALL_FN_ALARM_SET     38
 #define SYSCALL_FN_ALARM_UNSET   39
-#define SYSCALL_FN_KERNEL_MEMORY_STATUS 40
+#define SYSCALL_FN_KRN_MEMORY_STATUS 40
 #define SYSCALL_FN_MTX_LOCK      41
 #define SYSCALL_FN_MTX_TRYLOCK   42
 #define SYSCALL_FN_MTX_UNLOCK    43
@@ -54,6 +54,7 @@
 #define SYSCALL_FN_QUE_LIST      45
 #define SYSCALL_FN_PGM_SETTASKQ  46
 #define SYSCALL_FN_PGM_GETTASKQ  47
+#define SYSCALL_FN_KRN_GET_SYSTIME 48
 
 void syscall_init(void);
 
@@ -108,10 +109,11 @@ int syscall_file_read(int fp, void* buf, unsigned int size);
 int syscall_file_opendir(unsigned long *vdirdesc, char *dirname);
 int syscall_file_readdir(unsigned long *vdirdesc, char *dirent);
 int syscall_file_closedir(unsigned long *vdirdesc);
-int syscall_kernel_get_bios_info(char *binfo);
+int syscall_krn_get_bios_info(char *binfo);
+int syscall_krn_memory_status(unsigned long *status);
+int syscall_krn_get_systime(void *systime);
 int syscall_alarm_set(unsigned int alarmtime, int queid, int arg);
 int syscall_alarm_unset(int alarmid, int queid);
-int syscall_kernel_memory_status(unsigned long *status);
 
 
 int syscall_intr_regist(int irq, int queid);

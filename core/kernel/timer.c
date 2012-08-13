@@ -36,17 +36,19 @@
 #define TIMER_PIT_CNL_CNT2 0x80 // counter 2
 #define TIMER_PIT_CNL_RBC  0xC0 // read back command
 
+#define TIMER_SYSTIME_LOW_RESO 100 // 10msec=1/100sec
 
 static TIMER_SYSTIME_TYPE timer_systime_counter;
-
 
 //#pragma interrupt
 INTR_INTERRUPT(timer_intr);
 void timer_intr(void)
 {
   timer_systime_counter.low++;
-  if(timer_systime_counter.low==0)
+  if(timer_systime_counter.low >= TIMER_SYSTIME_LOW_RESO) {
     timer_systime_counter.high++;
+    timer_systime_counter.low = 0;
+  }
 
   pic_eoi(PIC_IRQ_TIMER);	/* notify "Reception completion" to PIC */
 /*
@@ -85,10 +87,10 @@ void timer_init(void)
 {
   // 1193180 / 1.19318MHz =   1 sec  --> overflow for 16bit
   // 119318  / 1.19318MHz = 100msec  --> overflow for 16bit
-  // 59659   / 1.19318MHz =  50msec
-  // 11932   / 1.19318MHz =  10msec
-  // 1193    / 1.19318MHz =   1msec
-  // 119     / 1.19318MHz = 100micro-sec
+  // 59659   / 1.19318MHz =  50msec      = 1/20sec
+  // 11932   / 1.19318MHz =  10msec      = 1/100sec
+  // 1193    / 1.19318MHz =   1msec      = 1/1000sec
+  // 119     / 1.19318MHz = 100micro-sec = 1/10000sec
   int counter = 11932; 
 
   intr_define(0x20+PIC_IRQ_TIMER, INTR_INTR_ENTRY(timer_intr),INTR_DPL_SYSTEM);
@@ -109,20 +111,12 @@ void timer_get_systime(TIMER_SYSTIME_TYPE *systime)
   *systime = timer_systime_counter;
 }
 
-void timer_add(TIMER_SYSTIME_TYPE *systime, int delta)
+void timer_add(TIMER_SYSTIME_TYPE *systime, unsigned int delta)
 {
-  unsigned long tmp;
-
-  tmp = systime->low;
-  if(delta > 0) {
-    systime->low += delta;
-    if(tmp > systime->low)
-      systime->high ++;
-  }
-  else {
-    systime->low += delta;
-    if(tmp < systime->low)
-      systime->high --;
+  systime->low += delta;
+  if(systime->low >= TIMER_SYSTIME_LOW_RESO) {
+    systime->high += (systime->low / TIMER_SYSTIME_LOW_RESO);
+    systime->low  %= TIMER_SYSTIME_LOW_RESO;
   }
 }
 
