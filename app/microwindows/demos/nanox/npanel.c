@@ -60,11 +60,11 @@ struct app_info {
 	char		app_id[10];
 	char		app_path[64];
 } Apps[] = {
+	{"xterm", "nxterm.out"},
 	{"xeyes", "nxeyes.out"},
 	{"clock", "nxclock.out"},
+	{"dash", "dashdemo.out"},
 	{"term", "nterm.out"},
-	{"demo2", "bin/demo2"},
-	{"ntest", "bin/ntest"},
 	{"", ""}
 };
 

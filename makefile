@@ -17,7 +17,7 @@ KERNEL=$(KERNELDIR)/kernel.sys
 SERVERS=$(SERVERDIR)/display.out $(SERVERDIR)/keyboard.out $(SERVERDIR)/command.out $(SERVERDIR)/mouse.out
 COMMANDS=$(COMMANDDIR)/dir.out $(COMMANDDIR)/type.out $(COMMANDDIR)/free.out $(COMMANDDIR)/ps.out $(COMMANDDIR)/qs.out $(COMMANDDIR)/cls.out $(COMMANDDIR)/date.out
 MICROWINLIB=$(MICROWINDIR)/lib/libmwdrivers.a $(MICROWINDIR)/lib/libmwengine.a $(MICROWINDIR)/lib/libmwfonts.a $(MICROWINDIR)/lib/libmwnanox.a
-NANOXEXECS=$(MICROWINDIR)/nanox/nanox.out $(MICROWINDIR)/demos/nanowm/nanowm.out $(MICROWINDIR)/demos/nanox/npanel.out $(MICROWINDIR)/demos/nanox/nxeyes.out $(MICROWINDIR)/demos/nanox/nxclock.out $(MICROWINDIR)/demos/nanox/nterm.out
+NANOXEXECS=$(MICROWINDIR)/nanox/nanox.out $(MICROWINDIR)/demos/nanowm/nanowm.out $(MICROWINDIR)/demos/nanox/npanel.out $(MICROWINDIR)/demos/nanox/nxeyes.out $(MICROWINDIR)/demos/nanox/nxclock.out $(MICROWINDIR)/demos/nanox/nterm.out $(MICROWINDIR)/demos/nanox/dashdemo.out $(MICROWINDIR)/demos/nanox/nxterm.out
 EXES=$(LOADERS) $(KERNEL) $(SERVERS) $(COMMANDS) $(NANOXEXECS) $(TESTS)
 
 
@@ -78,6 +78,12 @@ $(MICROWINDIR)/demos/nanox/nxclock.out: $(STDLIB) $(MICROWINDIR)/make.touch
 	cd $(MICROWINDIR) && make
 
 $(MICROWINDIR)/demos/nanox/nterm.out: $(STDLIB) $(MICROWINDIR)/make.touch
+	cd $(MICROWINDIR) && make
+
+$(MICROWINDIR)/demos/nanox/dashdemo.out: $(STDLIB) $(MICROWINDIR)/make.touch
+	cd $(MICROWINDIR) && make
+
+$(MICROWINDIR)/demos/nanox/nxterm.out: $(STDLIB) $(MICROWINDIR)/make.touch
 	cd $(MICROWINDIR) && make
 
 $(TESTDIR)/tstdemox.out: $(STDLIB) $(MICROWINDIR)/make.touch

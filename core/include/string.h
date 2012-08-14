@@ -21,6 +21,9 @@ void word2hex(unsigned short num, char *str);
 void long2hex(unsigned long num, char *str);
 char numtohex1(char chr);
 char uppercase(char c);
+
+// external object code
 int dbl2dec(double val, char *str, int width);
+char *strrchr(char *str, char ch);
 
 #endif

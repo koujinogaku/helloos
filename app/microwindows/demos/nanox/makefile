@@ -18,7 +18,7 @@ MICROWINLIB=$(MICROWINDIR)/lib/libmwnanox.a
 
 OBJS= 
 
-all: npanel.out nxeyes.out nxclock.out nterm.out
+all: npanel.out nxeyes.out nxclock.out nterm.out dashdemo.out nxterm.out
 
 npanel.out: npanel.o $(MICROWINLIB) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) npanel.o $(MICROWINLIB) $(APPLIB) -o $@
@@ -34,6 +34,12 @@ nxclock.out: nxclock.o $(MICROWINLIB) $(APPLIB)
 
 nterm.out: nterm.o $(MICROWINLIB) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) nterm.o $(MICROWINLIB) $(APPLIB) -o $@
+
+dashdemo.out: dashdemo.o $(MICROWINLIB) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) dashdemo.o $(MICROWINLIB) $(APPLIB) -o $@
+
+nxterm.out: nxterm.o $(MICROWINLIB) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) nxterm.o $(MICROWINLIB) $(APPLIB) -o $@
 
 %.a: %.o
 	$(AR) r $@ $?
