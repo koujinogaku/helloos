@@ -58,7 +58,7 @@ static int nxSharedMemSize;	/* Size in bytes of shared mem segment*/
 #endif
 
 static int regfdmax = -1;	/* GrRegisterInput globals*/
-//static fd_set regfdset;
+static fd_set regfdset;
 
 /**
  * Human-readable error strings.
@@ -742,7 +742,6 @@ GrUnregisterInput(int fd)
  *
  * @ingroup nanox_event
  */
-#if !HELLOOS
 void
 GrPrepareSelect(int *maxfd,void *rfdset)
 {
@@ -768,19 +767,6 @@ GrPrepareSelect(int *maxfd,void *rfdset)
 	}
 	UNLOCK(&nxGlobalLock);
 }
-#else
-void
-GrPrepareSelect(int *maxfd,void *rfdset)
-{
-	ACCESS_PER_THREAD_DATA()
-	LOCK(&nxGlobalLock);
-	AllocReq(GetNextEvent);
-	GrFlush();
-	if(nxSocket > *maxfd)
-		*maxfd = nxSocket;
-	UNLOCK(&nxGlobalLock);
-}
-#endif
 
 /**
  * Handles events after the client has done a select() call.
@@ -799,10 +785,8 @@ GrPrepareSelect(int *maxfd,void *rfdset)
 void
 GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 {
-#if !HELLOOS
 	fd_set *	rfds = rfdset;
-#endif
-	int		fd;
+	//int		fd;
 	GR_EVENT 	ev;
 	struct	msg_head *msg;
 
@@ -865,17 +849,15 @@ GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 void
 GrMainLoop(GR_FNCALLBACKEVENT fncb)
 {
-#if !HELLOOS
 	fd_set	rfds;
-#endif
 	int	setsize = 0;
 
 	for(;;) {
 		FD_ZERO(&rfds);
 #if HELLOOS
-		GrPrepareSelect(&setsize, 0);
-		if(bucket_select(0) > 0)
-			GrServiceSelect(0, fncb);
+		GrPrepareSelect(&setsize, &rfds);
+		if(bucket_select(setsize+1, &rfds, 0) > 0)
+			GrServiceSelect(&rfds, fncb);
 #else
 		GrPrepareSelect(&setsize, &rfds);
 		if(select(setsize+1, &rfds, NULL, NULL, NULL) > 0)
@@ -1004,8 +986,8 @@ GrGetNextEventTimeout(GR_EVENT * ep, GR_TIMEOUT timeout)
 static void
 _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 {
-#if !HELLOOS
 	fd_set		rfds;
+#if !HELLOOS
 	struct timeval	to;
 #endif
 	int		setsize = 0;
@@ -1023,10 +1005,8 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 	 * that point, a single stored event won't work, and the
 	 * client needs an event queue.
 	 */
-#if HELLOOS
-	GrPrepareSelect(&setsize, 0);
-#else
 	GrPrepareSelect(&setsize, &rfds);
+#if !HELLOOS
 	if (timeout) {
 		to.tv_sec = timeout / 1000;
 		to.tv_usec = (timeout % 1000) * 1000;
@@ -1034,7 +1014,7 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 #endif
 
 #if HELLOOS
-	if((e = bucket_select(timeout))>0)
+	if((e = bucket_select(setsize+1, &rfds, timeout))>0)
 #else
 	if((e = select(setsize+1, &rfds, NULL, NULL, timeout ? &to : NULL))>0)
 #endif

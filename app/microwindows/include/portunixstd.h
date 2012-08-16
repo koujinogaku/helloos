@@ -29,10 +29,6 @@ typedef unsigned int size_t;
 #define NX_QNM_BUCKET MSGQUENAMES_WINDOW
 #define NX_SRV_BUCKET MSGQUENAMES_WINDOW
 
-#define FD_SET(a,b)
-#define FD_ZERO(a)
-#define FD_CLR(a,b)
-#define FD_ISSET(fd, b) bucket_isset(fd)
 
 //#define SOCK_STREAM     1
 

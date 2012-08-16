@@ -250,14 +250,11 @@ static void calculate_timeval(struct timeval *tv, MWTIMEOUT to)
 
 static signed long time_to_expiry(struct timeval *t)
 {
-	MWTIMEOUT ret = (t->tv_sec - current_time.tv_sec) * 1000;
-	if(t->tv_usec > current_time.tv_usec) {
-		ret += ( (t->tv_usec - current_time.tv_usec) / 1000 );
-	}
-	else {
-		ret -= 1000;
-		ret += ( 1000 - ((int)((current_time.tv_usec - t->tv_usec) / 1000)) );
-	}
+	int ret;
+
+		ret = ((int)(t->tv_sec - current_time.tv_sec)) * 1000;
+		ret += ((int)(t->tv_usec - current_time.tv_usec)) / 1000;
+
 	return ret;
 }
 

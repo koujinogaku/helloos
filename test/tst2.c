@@ -1,5 +1,6 @@
 #include "cpu.h"
 #include "syscall.h"
+#include "stdlib.h"
 #include "string.h"
 #include "keyboard.h"
 #include "display.h"
@@ -245,6 +246,8 @@ int tst_bucket()
   int rc;
   char *buffer;
   int j;
+  fd_set fdset;
+  int fdsize=0;
 
   rc=fd=bucket_open();
   if(rc<0) {
@@ -294,10 +297,15 @@ int tst_bucket()
 //    return 1;
 //  }
 
+  rc=bucket_shutdown(fd);
+
   j=0;
   while(j<5) {
     display_puts("receiving(client)...");
-    rc=bucket_select(0);
+    fdsize=max(fdsize,fd);
+    FD_ZERO(&fdset);
+    FD_SET(fd,&fdset);
+    rc=bucket_select(fdsize+1,&fdset, 0);
     if(rc<0) {
       display_puts("select error=");
       int2dec(-rc,s);
@@ -330,6 +338,7 @@ syscall_wait(100);
     j++;
   }
 
+  rc=bucket_close(fd);
   display_puts("done(client)\n");
 
   return 0;
@@ -448,12 +457,12 @@ int start()
 //  tst_console();
 //  tst_que();
 //  tst_key();
-  tst_alarm();
+//  tst_alarm();
 //  tst_window();
 //  tst_shm();
 //  tst_shm2();
 //  tst_mutex();
-//  tst_bucket();
+  tst_bucket();
 
   return 789;
 }

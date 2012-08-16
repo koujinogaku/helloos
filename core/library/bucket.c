@@ -1,5 +1,4 @@
 #include "config.h"
-#include "list.h"
 #include "syscall.h"
 #include "memory.h"
 #include "errno.h"
@@ -22,7 +21,7 @@
 #define BUCKET_MODE_SHUTPEER 4 // send=enable,  recv=disable (received close packet)
 #define BUCKET_MODE_CLOSED   5 // send=disable, recv=disable (send & received close packet)
 
-#define BUCKET_ARG_CONNECT 1 // not used
+#define BUCKET_ARG_CONNECT 1
 #define BUCKET_ARG_DATA    2
 #define BUCKET_ARG_CLOSE   3
 
@@ -52,18 +51,8 @@ struct bucket_dsc {
 
 typedef struct bucket_dsc BUCKET;
 
-
-struct BUCKET_TBL {
-  struct BUCKET_TBL *next;
-  struct BUCKET_TBL *prev;
-  unsigned int id;
-  int vmem;
-  unsigned int size;
-};
-
 static struct msg_head selected_msg;
 
-static struct BUCKET_TBL *buckettbl=0;
 static BUCKET **dsctbl=0;
 
 static int  *smtx=0;
@@ -95,8 +84,6 @@ static int bucket_init_in(void)
   if(dsctbl==0)
     return ERRNO_RESOURCE;
   memset(dsctbl,0,sizeof(BUCKET*)*BUCKET_MAXDSC);
-  dsctbl[0]=malloc(sizeof(BUCKET));
-  list_init(dsctbl[0]);
 
   shmrc=shm_create(CFG_MEM_BUCKETHEAP,CFG_MEM_BUCKETHEAPSZ); // same name to map address
   if(shmrc<0 && shmrc!=ERRNO_INUSE)
@@ -112,9 +99,6 @@ static int bucket_init_in(void)
     *smtx=1;
     memory_init(hctl,CFG_MEM_BUCKETHEAPSZ-sizeof(int));
     syscall_mtx_unlock(smtx);
-    buckettbl = bucket_malloc(sizeof(struct BUCKET_TBL));
-    memset(buckettbl,0,sizeof(struct BUCKET_TBL));
-    list_init(buckettbl);
   }
 
   return 0;
@@ -137,7 +121,7 @@ int bucket_open(void)
   if(rc<0)
     return rc;
 
-  for(i=1;i<BUCKET_MAXDSC;i++)
+  for(i=0;i<BUCKET_MAXDSC;i++)
     if(dsctbl[i]==0)
       break;
   if(i>=BUCKET_MAXDSC)
@@ -146,7 +130,6 @@ int bucket_open(void)
   dsctbl[i]=malloc(sizeof(BUCKET));
   memset(dsctbl[i],0,sizeof(BUCKET));
   dsctbl[i]->dsc=i;
-  list_add_tail(dsctbl[0],dsctbl[i]);
 
   dsctbl[i]->mode=BUCKET_MODE_OPEN;
   return i;
@@ -160,7 +143,7 @@ int bucket_bind(int dsc, int que_name, int service)
   if(rc<0)
     return rc;
 
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]==0)
     return ERRNO_NOTEXIST;
@@ -189,7 +172,7 @@ int bucket_connect(int dsc, int que_name, int service)
   if(rc<0)
     return rc;
 
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]==0)
     return ERRNO_NOTEXIST;
@@ -213,6 +196,12 @@ int bucket_connect(int dsc, int que_name, int service)
   if(rc<0)
     return rc;
 
+  rc=message_receive(MESSAGE_MODE_WAIT, dsctbl[dsc]->service, dsctbl[dsc]->dst_qid, &msg);
+  if(rc<0)
+    return rc;
+  if(msg.arg!=BUCKET_ARG_CONNECT)
+    return ERRNO_CTRLBLOCK;
+
   dsctbl[dsc]->mode=BUCKET_MODE_DATA;
   return 0;
 }
@@ -227,7 +216,7 @@ int bucket_send(int dsc, void *buffer, int size)
   if(rc<0)
     return rc;
 
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]==0)
     return ERRNO_NOTEXIST;
@@ -266,47 +255,54 @@ int bucket_send(int dsc, void *buffer, int size)
   return rc;
 }
 
-int bucket_select(unsigned long timeout)
+int bucket_select(int fdsetsize, fd_set *rfds, unsigned long timeout)
 {
   struct bucket_dsc *dscp;
   union  bucket_msg bucketmsg;
   int selected=0;
   int rc;
+  int fd;
   int timeout_alarm=0;
+  fd_set result;
 
   rc=bucket_init();
   if(rc<0)
     return rc;
 
-  list_for_each(dsctbl[0],dscp) {
+  FD_ZERO(&result);
+  for(fd=0; fd<fdsetsize && fd<BUCKET_MAXDSC; fd++) {
+    if(dsctbl[fd]==0 || !FD_ISSET(fd,rfds))
+      continue;
+    dscp = dsctbl[fd];
     if(dscp->have_block==0) {
       bucketmsg.h.size=sizeof(union bucket_msg);
-      rc=message_receive(MESSAGE_MODE_TRY, dscp->service, dscp->dst_qid, &bucketmsg);
-      if(rc==ERRNO_OVER) {
+      rc=message_poll(MESSAGE_MODE_TRY, dscp->service, dscp->dst_qid, &bucketmsg);
+      if(rc==0) {
       }
       else if(rc<0)
         return rc;
       else {
-        memcpy(&(dscp->last_msg),&bucketmsg, min(sizeof(union bucket_msg),bucketmsg.h.size));
-        memcpy(&selected_msg,(&dscp->last_msg),sizeof(selected_msg));
-        dscp->pos=0;
-        dscp->have_block=1;
+        FD_SET(fd,&result);
+        memcpy(&selected_msg,&bucketmsg,sizeof(selected_msg));
         selected=1;
       }
     }
     else {
-      selected=1;
+      FD_SET(fd,&result);
       memcpy(&selected_msg,(&dscp->last_msg),sizeof(selected_msg));
+      selected=1;
     }
+  }
+
+  if(selected) {
+    memcpy(rfds,&result,sizeof(fd_set));
+    return BUCKET_SELECT_DATA;
   }
 
   selected_msg.size=sizeof(struct msg_head);
   rc=message_poll(MESSAGE_MODE_TRY, 0, 0, &selected_msg);
   if(rc<0)
     return rc;
-
-  if(selected  && rc==0)
-      return BUCKET_SELECT_DATA;
 
   if(rc==0) {
     if(timeout!=0) {
@@ -333,27 +329,22 @@ int bucket_select(unsigned long timeout)
     }
   }
 
-  list_for_each(dsctbl[0],dscp) {
-    if(dscp->have_block==0 && dscp->service==selected_msg.service && dscp->dst_qid==selected_msg.command) {
-      bucketmsg.h.size=sizeof(union bucket_msg);
-      rc=message_receive(MESSAGE_MODE_TRY, dscp->service, dscp->dst_qid, &bucketmsg);
-      if(rc<0)
-        return rc;
-      memcpy(&(dscp->last_msg),&bucketmsg,sizeof(union bucket_msg));
-      dscp->pos=0;
-      dscp->have_block=1;
+  for(fd=0; fd<fdsetsize && fd<BUCKET_MAXDSC; fd++) {
+    if(dsctbl[fd]==0 || !FD_ISSET(fd,rfds))
+      continue;
+    dscp = dsctbl[fd];
+    if(dscp->service==selected_msg.service && dscp->dst_qid==selected_msg.command) {
+      FD_SET(fd,&result);
+      memcpy(rfds,&result,sizeof(fd_set));
       return BUCKET_SELECT_DATA;
     }
   }
 
-  if(selected)
-    return BUCKET_SELECT_DATA;
-  else {
-    if(selected_msg.service==MSG_SRV_ALARM && selected_msg.command==alarm_command)
-      return 0; // timeout
-    else
-      return BUCKET_SELECT_MSG;
-  }
+  FD_ZERO(rfds);
+  if(selected_msg.service==MSG_SRV_ALARM && selected_msg.command==alarm_command)
+    return 0; // timeout
+  else
+    return BUCKET_SELECT_MSG;
 }
 
 void *bucket_selected_msg(void)
@@ -361,40 +352,45 @@ void *bucket_selected_msg(void)
   return &selected_msg;
 }
 
-int bucket_isset(int dsc)
-{
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
-    return 0;
-  if(dsctbl[dsc]==0)
-    return 0;
-
-  return dsctbl[dsc]->have_block;
-}
-
 int bucket_accept(int dsc)
 {
   int newdsc;
   int rc;
+  union bucket_msg bucketmsg;
+  unsigned int client;
 
   rc=bucket_init();
   if(rc<0)
     return rc;
 
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]==0)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]->mode!=BUCKET_MODE_ACCEPT)
     return ERRNO_MODE;
 
-  if(!dsctbl[dsc]->have_block)
-    return ERRNO_CTRLBLOCK;
-
+  if(!(dsctbl[dsc]->have_block)) {
+    bucketmsg.h.size=sizeof(union bucket_msg);
+    rc=message_receive(MESSAGE_MODE_WAIT, dsctbl[dsc]->service, dsctbl[dsc]->dst_qid, &bucketmsg);
+    if(rc<0)
+      return rc;
+    memcpy(&(dsctbl[dsc]->last_msg),&bucketmsg,sizeof(union bucket_msg));
+    dsctbl[dsc]->pos=0;
+    dsctbl[dsc]->have_block=1;
+  }
   if(dsctbl[dsc]->last_msg.h.command!=dsctbl[dsc]->src_qid) // not accept command
     return ERRNO_CTRLBLOCK;
 
+  client = dsctbl[dsc]->last_msg.h.arg;
+
+  bucketmsg.h.arg=BUCKET_ARG_CONNECT;
+  rc=message_send(client, &bucketmsg);
+  if(rc<0)
+    return rc;
+
   newdsc = bucket_open();
-  dsctbl[newdsc]->dst_qid = dsctbl[dsc]->last_msg.h.arg;
+  dsctbl[newdsc]->dst_qid = client;
   dsctbl[newdsc]->src_qid = dsctbl[dsc]->src_qid;
   dsctbl[newdsc]->service = dsctbl[dsc]->service;
   dsctbl[newdsc]->mode=BUCKET_MODE_DATA;
@@ -412,7 +408,7 @@ int bucket_recv(int dsc, void *buffer, int size)
   if(rc<0)
     return rc;
 
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]==0)
     return ERRNO_NOTEXIST;
@@ -426,9 +422,6 @@ int bucket_recv(int dsc, void *buffer, int size)
   if(!(dsctbl[dsc]->have_block)) {
     bucketmsg.h.size=sizeof(union bucket_msg);
     rc=message_receive(MESSAGE_MODE_WAIT, dsctbl[dsc]->service, dsctbl[dsc]->dst_qid, &bucketmsg);
-    //if(rc==ERRNO_OVER) {
-    //  return 0;
-    //}
     if(rc<0)
       return rc;
     memcpy(&(dsctbl[dsc]->last_msg),&bucketmsg,sizeof(union bucket_msg));
@@ -465,7 +458,7 @@ int bucket_shutdown(int dsc)
   struct msg_head msg;
   int rc;
 
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]==0)
     return ERRNO_NOTEXIST;
@@ -496,7 +489,7 @@ int bucket_close(int dsc)
 {
   //int rc;
 
-  if(dsc<=0 || dsc>=BUCKET_MAXDSC)
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
     return ERRNO_NOTEXIST;
   if(dsctbl[dsc]==0)
     return ERRNO_NOTEXIST;
@@ -509,7 +502,6 @@ int bucket_close(int dsc)
   //if(rc<0)
   //  return rc;
 
-  list_del(dsctbl[dsc]);
   mfree(dsctbl[dsc]);
   dsctbl[dsc]=0;
 

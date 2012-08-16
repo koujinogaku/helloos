@@ -6,6 +6,8 @@
 #define tolower(n) ( ( (n)>='A' && (n)<='Z') ? ((n)+0x20) : (n))
 #define toupper(n) ( ( (n)>='a' && (n)<='z') ? ((n)-0x20) : (n))
 #define exit(exitcode)   environment_exit(exitcode)
+#define max(x,y) (((x)>(y))?(x):(y))
+#define min(x,y) (((x)<(y))?(x):(y))
 
 void qsort(void* base, unsigned int n, unsigned int size, int(*fnc)(const void*, const void*));
 int atoi(const char* str);

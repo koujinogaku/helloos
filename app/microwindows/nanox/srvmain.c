@@ -697,15 +697,28 @@ GsSelect(GR_TIMEOUT timeout)
 void
 GsSelect(GR_TIMEOUT timeout)
 {
+	fd_set	rfds;
+	int 	e;
+	int	setsize = 0;
 	int r;
-	struct msg_head *msg;
+	struct msg_head bucketmsg;
 	unsigned long timeout_for_select;
 #if MW_FEATURE_TIMERS
 	struct timeval tout;
 #endif /* MW_FEATURE_TIMERS */
 
+	/* perform pre-select duties, if any*/
+	if(rootwp->psd->PreSelect)
+		rootwp->psd->PreSelect(rootwp->psd);
+
+	/* Set up the FDs for use in the main select(): */
+	FD_ZERO(&rfds);
 	/* Set up requester for use in the main message_receive(): */
 	r=keyboard_request_key();
+
+	/* handle client socket connections*/
+	FD_SET(un_sock, &rfds);
+	if (un_sock > setsize) setsize = un_sock;
 
 	/* handle client connections*/
 	curclient = root_client;
@@ -715,6 +728,8 @@ GsSelect(GR_TIMEOUT timeout)
 			GrGetNextEventWrapperFinish(curclient->id);
 			return;
 		}
+		FD_SET(curclient->id, &rfds);
+		if(curclient->id > setsize) setsize = curclient->id;
 		curclient = curclient->next;
 	}
 
@@ -726,6 +741,8 @@ GsSelect(GR_TIMEOUT timeout)
 	} else {
 		if(GdGetNextTimeout(&tout, timeout) == TRUE) {
 			timeout_for_select = tout.tv_sec*1000 + tout.tv_usec/1000;
+			if(timeout_for_select==0)
+				timeout_for_select=1;
 		}
 		else {
 			timeout_for_select=0;
@@ -734,54 +751,59 @@ GsSelect(GR_TIMEOUT timeout)
 #else
 	timeout_for_select=0;
 #endif /* MW_FEATURE_TIMERS */
-
 	/* Wait for some input on any of the fds in the set or a timeout: */
-	r=bucket_select(timeout_for_select);
-	msg=bucket_selected_msg();
-	if(r<0) {
-		EPRINTF("select() call in main failed\n");
-		return;
-	}
-
-	if(mousedev.Poll()) {
-		/* If data is present on the mouse fd, service it: */
-		while(GsCheckMouseEvent()) {
-			continue;
+	if((e = bucket_select(setsize+1,  &rfds, timeout_for_select)) > 0) {
+		if(mousedev.Poll()) {
+			/* If data is present on the mouse fd, service it: */
+			while(GsCheckMouseEvent()) {
+				continue;
+			}
 		}
-	}
 
-	/* If data is present on the keyboard fd, service it: */
-	while(kbddev.Poll()) {
-		GsCheckKeyboardEvent();
-	}
+		/* If data is present on the keyboard fd, service it: */
+		while(kbddev.Poll()) {
+			GsCheckKeyboardEvent();
+		}
 
-	if(r==BUCKET_SELECT_DATA) {
-		if(bucket_isset(un_sock)) {
-			/* If a client is trying to connect, accept it: */
-			GsAcceptClient();
+		if(e==BUCKET_SELECT_DATA) {
+			if(FD_ISSET(un_sock,&rfds)) {
+				/* If a client is trying to connect, accept it: */
+				GsAcceptClient();
+			}
+			else {
+				/* If a client is sending us a command, handle it: */
+				/* msg->command ==> source qid ==> client id, becouse command-field can be used to select */
+
+				/* If a client is sending us a command, handle it: */
+				curclient = root_client;
+				while(curclient) {
+					GR_CLIENT *curclient_next;
+					/* curclient may be freed in GsDropClient*/
+					curclient_next = curclient->next;
+					if(FD_ISSET(curclient->id,&rfds)) {
+						GsHandleClient(curclient->id);
+					}
+					curclient = curclient_next;
+				}
+			}
 		}
 		else {
-			/* If a client is sending us a command, handle it: */
-			/* msg->command ==> source qid ==> client id, becouse command-field can be used to select */
-
-			/* If a client is sending us a command, handle it: */
-			curclient = root_client;
-			while(curclient) {
-				GR_CLIENT *curclient_next;
-				/* curclient may be freed in GsDropClient*/
-				curclient_next = curclient->next;
-				if(bucket_isset(curclient->id)) {
-					GsHandleClient(curclient->id);
-				}
-				curclient = curclient_next;
+			bucketmsg.size=sizeof(struct msg_head);
+			r=message_poll(MESSAGE_MODE_TRY, 0, 0, &bucketmsg);
+			if(r>0 && bucketmsg.service!=KBD_SRV_KEYBOARD && bucketmsg.service!=MOU_SRV_MOUSE) {
+				r=message_receive(MESSAGE_MODE_TRY, 0, 0, &bucketmsg);
+				EPRINTF("Receive a dust block srv=%x,cmd=%x\n",bucketmsg.service,bucketmsg.command);
 			}
 		}
 	}
+	else if(e==0) {
 #if MW_FEATURE_TIMERS
-	else if(r==0) {
 		GdTimeout();
-	}
 #endif
+	}
+	else
+		EPRINTF("Select() call in main failed\n");
+
 
 #endif /* NONETWORK */
 }

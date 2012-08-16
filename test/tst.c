@@ -1,4 +1,5 @@
 #include "syscall.h"
+#include "stdlib.h"
 #include "string.h"
 #include "keyboard.h"
 #include "display.h"
@@ -780,6 +781,8 @@ int tst_bucket()
   int rc;
   char *buffer;
   int j;
+  fd_set fdset;
+  int fdsize=0;
 
   rc=fd=bucket_open();
   if(rc<0) {
@@ -790,7 +793,6 @@ int tst_bucket()
     return 1;
   }
 
-
   rc=bucket_bind(fd, BKT_QNM_BUCKET, BKT_SRV_BUCKET);
   if(rc<0) {
     display_puts("bind error=");
@@ -800,8 +802,12 @@ int tst_bucket()
     return 1;
   }
 
+  
+  fdsize=max(fdsize,fd);
+  FD_ZERO(&fdset);
+  FD_SET(fd,&fdset);
   display_puts("wait accepting in select...");
-  rc=bucket_select(1000);
+  rc=bucket_select(fdsize+1,&fdset, 10000);
   if(rc<0) {
     display_puts("select error=");
     int2dec(-rc,s);
@@ -835,7 +841,10 @@ int tst_bucket()
   j=0;
 
     display_puts("receiving(server)...");
-    rc=bucket_select(100);
+    fdsize=max(fdsize,fd);
+    FD_ZERO(&fdset);
+    FD_SET(cli,&fdset);
+    rc=bucket_select(fdsize+1,&fdset, 1000);
     if(rc<0) {
       display_puts("select error=");
       int2dec(-rc,s);
@@ -885,6 +894,8 @@ int tst_bucket()
   display_puts("byte.(");
   display_puts(buffer);
   display_puts(")\n");
+
+  rc=bucket_shutdown(cli);
 
   rc=bucket_close(cli);
   if(rc<0) {
@@ -1238,7 +1249,7 @@ int start(int argc, char *argv[])
 //  tst_heap2();
 //  tst_dir();
 //  tst_dsp();
-  tst_alarm();
+//  tst_alarm();
 //  tst_args(argc,argv);
 //  tst_mouse();
 //  tst_usermsg();
@@ -1247,7 +1258,7 @@ int start(int argc, char *argv[])
 //  tst_shm();
 //  tst_shm2();
 //  tst_mutex();
-//  tst_bucket();
+  tst_bucket();
 //tst_fpu(2.9, 2);
 //tst_int(10.9);
 //tst_printdouble(100.0 , 8);
