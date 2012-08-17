@@ -63,8 +63,10 @@ struct app_info {
 	{"xterm", "nxterm.out"},
 	{"xeyes", "nxeyes.out"},
 	{"clock", "nxclock.out"},
-	{"dash", "dashdemo.out"},
 	{"term", "nterm.out"},
+	{"dash", "dashdemo.out"},
+	{"world", "world.out"},
+	{"tux",   "tux.out"},
 	{"", ""}
 };
 

@@ -403,9 +403,7 @@ GdGetColorRGB(PSD psd, MWPIXELVAL pixel)
 }
 
 #if !VXWORKS
-#if defined(HAVE_FILEIO)
-#include <unistd.h>
-#include <fcntl.h>
+#if defined(HAVE_FILEIO) && !HELLOOS
 /*
  * Create .bmp file from framebuffer data
  *
@@ -491,7 +489,7 @@ putdw(unsigned long dw, FILE *ofp)
 int
 GdCaptureScreen(char *path)
 {
-#if defined(HAVE_FILEIO)
+#if defined(HAVE_FILEIO) && !HELLOOS
 	int	ifd, i, j;
 	FILE *	ofp;
 	int	cx, cy, extra, bpp, bytespp, ncolors, sizecolortable;

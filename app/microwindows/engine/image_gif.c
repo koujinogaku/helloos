@@ -34,16 +34,10 @@
     License along with this library; if not, write to the Free
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "portunixstd.h"
+#include "memory.h"
+
 #include "device.h"
-#include "swap.h"
 
 #if MW_FEATURE_IMAGES && defined(HAVE_GIF_SUPPORT)
 

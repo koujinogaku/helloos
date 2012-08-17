@@ -28,10 +28,15 @@
 #define FASTJPEG	0			/* =1 for temp quick jpeg 8bpp*/
 #define HAVE_MMAP   0       		/* =1 to use mmap if available*/
 #define NONETWORK   0/*1*/
+#define HAVE_FILEIO     1
 
 #define TRANSLATE_ESCAPE_SEQUENCES  1		/* =1 to parse fnkeys w/tty driver*/
 
-#define MW_FEATURE_IMAGES 0		/* =1 to enable GdLoadImage* / GdDrawImage* */
+#define MW_FEATURE_IMAGES 1		/* =1 to enable GdLoadImage* / GdDrawImage* */
+#define HAVE_BMP_SUPPORT  1
+#define HAVE_GIF_SUPPORT  1
+//#define HAVE_JPEG_SUPPORT 1
+//#define HAVE_PNG_SUPPORT  1
 
 #define MW_FEATURE_TIMERS 1		/* =1 to include MWTIMER support */
 

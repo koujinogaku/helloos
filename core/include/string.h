@@ -24,6 +24,8 @@ char uppercase(char c);
 
 // external object code
 int dbl2dec(double val, char *str, int width);
-char *strrchr(char *str, char ch);
+char *strrchr(const char *str, char ch);
+char *strcat(char *str1, const char *str2);
+int strcmp( void *dest, const void *src);
 
 #endif

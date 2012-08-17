@@ -15,6 +15,8 @@
  * WARNING: GIF decoder and stretchimage routine are licensed under GPL only!
  */
 
+#include "portunixstd.h"
+#include "memory.h"
 
 #include "device.h"
 
@@ -72,7 +74,7 @@ GdImageBufferRead(buffer_t *buffer, void *dest, unsigned long size)
 	unsigned long copysize;
 
 	if (buffer->offset == buffer->size)
-		return 0;	/* EOF*/
+		return EOF;	// EOF
 
 	if (buffer->offset + size > buffer->size) 
 		copysize = buffer->size - buffer->offset;
@@ -88,7 +90,7 @@ int
 GdImageBufferGetChar(buffer_t *buffer)
 {
 	if (buffer->offset == buffer->size) 
-		return EOF;
+		return EOF; //EOF
 	return buffer->start[buffer->offset++];
 }
  
@@ -207,39 +209,44 @@ int
 GdLoadImageFromFile(PSD psd, char *path, int flags)
 {
 	int fd, id;
-	struct stat s;
+	unsigned int size;
 	void *buffer = 0;
 	buffer_t src;
   
-	fd = open(path, O_RDONLY);
-	if (fd < 0 || fstat(fd, &s) < 0) {
+	fd = syscall_file_open(path, O_RDONLY);
+	if (fd < 0 ) {
 		EPRINTF("GdLoadImageFromFile: can't open image: %s\n", path);
 		return 0;
 	}
 
+	if(syscall_file_size(fd, &size) < 0) {
+		EPRINTF("GdLoadImageFromFile: can't get a size: %s\n", path);
+		return 0;
+	}
+
 #if HAVE_MMAP
-	buffer = mmap(0, s.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	buffer = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (!buffer) {
 		EPRINTF("GdLoadImageFromFile: Couldn't map image %s\n", path);
 		close(fd);
 		return 0;
 	}
 #else
-	buffer = malloc(s.st_size);
+	buffer = malloc(size);
 	if (!buffer) {
 		EPRINTF("GdLoadImageFromFile: Couldn't malloc image %s\n", path);
-		close(fd);
+		syscall_file_close(fd);
 		return 0;
 	}
 
-	if (read(fd, buffer, s.st_size) != s.st_size) {
+	if (syscall_file_read(fd, buffer, size) != size) {
 		EPRINTF("GdLoadImageFromFile: Couldn't load image %s\n", path);
-		close(fd);
+		syscall_file_close(fd);
 		return 0;
 	}
 #endif
 
-	GdImageBufferInit(&src, buffer, s.st_size);
+	GdImageBufferInit(&src, buffer, size);
 	id = GdDecodeImage(psd, &src, path, flags);
 
 #if HAVE_MMAP
@@ -247,7 +254,7 @@ GdLoadImageFromFile(PSD psd, char *path, int flags)
 #else
 	free(buffer);
 #endif
-	close(fd);
+	syscall_file_close(fd);
 	return id;
 }
 #endif /* defined(HAVE_FILEIO) */

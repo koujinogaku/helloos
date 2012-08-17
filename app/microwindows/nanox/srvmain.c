@@ -787,6 +787,7 @@ GsSelect(GR_TIMEOUT timeout)
 				}
 			}
 		}
+#if 0
 		else {
 			bucketmsg.size=sizeof(struct msg_head);
 			r=message_poll(MESSAGE_MODE_TRY, 0, 0, &bucketmsg);
@@ -795,6 +796,7 @@ GsSelect(GR_TIMEOUT timeout)
 				EPRINTF("Receive a dust block srv=%x,cmd=%x\n",bucketmsg.service,bucketmsg.command);
 			}
 		}
+#endif
 	}
 	else if(e==0) {
 #if MW_FEATURE_TIMERS

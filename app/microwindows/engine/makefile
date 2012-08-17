@@ -11,9 +11,9 @@ CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(
 OBJS= devarc.o devclip.o devdraw.o devfont.o devimage.o devimage_stretch.o devkbd.o devlist.o devmouse.o devopen.o \
 devpal1.o devpal2.o devpal4.o devpal8.o devpalgray4.o devpoly.o devrgn2.o devrgn.o devstipple.o devtimer.o \
 error.o  \
-obsolete.o selfont.o font_dbcs.o
+obsolete.o selfont.o font_dbcs.o image_bmp.o image_gif.o
 
-### image_bmp.o image_gif.o image_jpeg.o image_png.o image_pnm.o image_tiff.o image_xpm.o
+### image_jpeg.o image_png.o image_pnm.o image_tiff.o image_xpm.o
 ### font_dbcs.o font_eucjp.o font_fnt.o font_freetype2.o font_freetype.o font_freetype.cache.o font_hzk.o font_pcf.o
 
 TARGET=../lib/libmwengine.a

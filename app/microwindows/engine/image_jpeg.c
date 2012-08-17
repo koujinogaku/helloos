@@ -34,16 +34,10 @@
  * On some systems you may need to set up a signal handler to ensure that
  * temporary files are deleted if the program is interrupted.  See libjpeg.doc.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "portunixstd.h"
+#include "memory.h"
+
 #include "device.h"
-#include "swap.h"
 
 #if MW_FEATURE_IMAGES && defined(HAVE_JPEG_SUPPORT)
 #include "jpeglib.h"

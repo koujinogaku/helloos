@@ -1,6 +1,6 @@
 #include "string.h"
 
-char *strrchr(char *str, char ch)
+char *strrchr(const char *str, char ch)
 {
   int len = strlen(str);
 

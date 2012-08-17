@@ -24,6 +24,22 @@
 typedef unsigned int size_t;
 #define offsetof(type, member) ((size_t)&((type*)0)->member)
 
+#ifndef O_BINARY
+#define O_BINARY 	0
+#endif
+#ifndef O_RDONLY
+#define O_RDONLY 0x0001
+#endif
+#ifndef O_WRONLY
+#define O_WRONLY 0x0002
+#endif
+#ifndef O_RDWR
+#define O_RDWR   0x0003
+#endif
+
+#ifndef EOF
+#define EOF (-1)
+#endif
 // ===== Socket =====
 #define AF_HELLO
 #define NX_QNM_BUCKET MSGQUENAMES_WINDOW
