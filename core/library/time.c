@@ -10,7 +10,7 @@
 
 
 static time_t init_unixtime;
-static struct clock_datetime_set initial_datetime;
+static struct tm initial_datetime;
 static struct kmem_systime init_systime;
 
 static int days_in_month[]= {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -25,7 +25,7 @@ static int time_is_leapyear(int year)
     return 0;
 }
 
-unsigned long time_trans_unixtime(struct clock_datetime_set* datetime_set)
+unsigned long time_trans_unixtime(struct tm* datetime_set)
 {
   unsigned int yday=0;
   unsigned int delta_year;
@@ -68,7 +68,7 @@ int time_init(void)
   if(init)
     return 0;
 
-  r=clock_get_date(&initial_datetime);
+  r=clock_get_date((void *)&initial_datetime);
   if(r<0)
     return r;
   r=syscall_krn_get_systime(&init_systime);

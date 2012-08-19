@@ -8,6 +8,11 @@
 #include "portunixstd.h"
 #include "syscall.h"
 #include "print.h"
+#include "memory.h"
+#include "errno.h"
+
+#define USE_CACHE  0
+
 
 #define MWINCLUDECOLORS
 #include "nano-X.h"
@@ -202,7 +207,7 @@ ROWS = si.rows - 80;
 
 	/* set title */
 	props.flags = GR_WM_FLAGS_TITLE | GR_WM_FLAGS_PROPS;
-	//props.props = GR_WM_PROPS_BORDER | GR_WM_PROPS_CAPTION;
+	props.props = GR_WM_PROPS_BORDER | GR_WM_PROPS_CAPTION;
 	props.title = (GR_CHAR *)"NanoX World Map";
 	GrSetWMProperties(mainwid, &props);
 
@@ -535,7 +540,72 @@ setzoom(FLOAT newzoom)
 	latradius = FIDIV(viewlat, 2);
 }
 
+#if USE_CACHE
+static char* cachebuff=0;
+static unsigned int cachesize=0;
+static int cachepos=0;
+static int cache_open(char *filename)
+{
+  int fd,rc;
+  int n=0;
 
+  cachepos=0;
+
+  if(cachebuff)
+    return 0;
+
+  fd = syscall_file_open(filename, O_BINARY | O_RDONLY);
+  if(fd<0)
+    return fd;
+
+  rc = syscall_file_size(fd, &cachesize);
+  if(rc<0) {
+    syscall_file_close(fd);
+    return rc;
+  }
+
+  cachebuff=malloc(cachesize);
+  if(cachebuff==0) {
+    syscall_file_close(fd);
+    return ERRNO_RESOURCE;
+  }
+  //memset(cachebuff,0,cachesize);
+
+  n = syscall_file_read(fd, cachebuff, cachesize);
+
+  if(n<0) {
+    syscall_file_close(fd);
+    return n;
+  }
+
+  syscall_file_close(fd);
+  return 0;
+}
+
+static int cache_read(int fd, void *bufv, unsigned int size)
+{
+  char *p=bufv;
+  int n;
+
+  if(cachepos==cachesize)
+    return 0;
+
+  for(n=0; n<size; n++) {
+    if(cachepos>=cachesize)
+      return ERRNO_OVER;
+    *p=cachebuff[cachepos];
+    p++;
+    cachepos++;
+  }
+
+  return n;
+}
+
+static int cache_close(int fd)
+{
+  return 0;
+}
+#endif
 /*
  * Read the database file and draw the world.
  */
@@ -563,14 +633,30 @@ load(char *fn)
 	is_out = GR_FALSE;
 	was_out = GR_FALSE;
 
-	fh = syscall_file_open(fn, O_BINARY | O_RDONLY);
+#if USE_CACHE
+	fh = cache_open(fn);
+#else
+	fh = syscall_file_open(fn,O_RDONLY|O_BINARY);
+#endif
 	if (fh < 0) {
 		GrClose();
 		printf("Cannot open %s\n", fn);
 		exit(1);
 	}
 
-	while ((n = syscall_file_read(fh, p, PCount * POINTSize)) > 0) {
+//printf("open %s\n", fn);
+//GrClose();
+//exit(1);
+
+	for(;;) {
+#if USE_CACHE
+		n = cache_read(fh, p, PCount * POINTSize);
+#else
+		n = syscall_file_read(fh, p, PCount * POINTSize);
+#endif
+		if(n <= 0)
+			break;
+
 		for (pp = p,pend = p + n/POINTSize; pp < pend; pp++)
 		{
 			DBPOINT_CONVERT(pp);
@@ -642,7 +728,13 @@ go_on:
 			newseg = GR_FALSE;
 		}
 	}
+	//if(n<0)
+	//	printf("Read Error %d\n", n);
+#if USE_CACHE
+	cache_close(fh);
+#else
 	syscall_file_close(fh);
+#endif
 }
 
 /* END CODE */

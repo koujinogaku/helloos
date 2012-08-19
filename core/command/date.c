@@ -18,7 +18,7 @@ int start(int argc, char *argv[])
 #endif
 
   clock_get_date(&datetime);
-  unixtime=time_trans_unixtime(&datetime);
+  unixtime=time_trans_unixtime((void *)&datetime);
 
   print_format("%s %s %02d %02d:%02d:%02d %d\n", wday[datetime.tm_wday], month[datetime.tm_mon], datetime.tm_mday, datetime.tm_hour, datetime.tm_min, datetime.tm_sec, datetime.tm_year);
 

@@ -319,15 +319,21 @@ int page_fault_proc( Excinfo *info )
   unsigned int vpage;
   void *ppage;
   void *pgd;
+  char s[16];
 
   if( info->errcode&PAGE_TYPE_PRESENT ) {
     console_puts("*** page is not present ***\n");
     return -1;
   }
-  if( (info->errcode&PAGE_TYPE_USER)==PAGE_TYPE_SUPER )  {
-    console_puts("*** page is supper user ***\n");
-    return -1;
-  }
+  //if( (info->errcode&PAGE_TYPE_USER)==PAGE_TYPE_SUPER )  {
+  //  console_puts("*** page is supper user ***\n");
+  //  console_puts("pgd(cr3)=");
+  //  pgd=page_get_pgd();
+  //  long2hex((unsigned long)pgd,s);
+  //  console_puts(s);
+  //  console_puts("\n");
+  //  return -1;
+  //}
 
   vpage = (unsigned int)page_get_faultaddr();
 

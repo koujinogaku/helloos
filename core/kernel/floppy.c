@@ -14,6 +14,7 @@
 #include "dma.h"
 #include "floppy.h"
 #include "errno.h"
+#include "mutex.h"
 #include "../loader/iplinfo.h"
 
 /* FDC registers */
@@ -120,7 +121,7 @@ static struct fdc_drive_stat fdc_drivestat[FDC_NUM_DRIVE];
 static int fdc_intr_qid=0;
 static void *fdc_dma_buffer;
 static byte fdc_current_drive=255;
-
+static int fdc_mutex=0;
 
 //static char s[64];
 
@@ -539,19 +540,23 @@ floppy_open( byte drive )
   int r;
   if( drive >= FDC_NUM_DRIVE )
     return ERRNO_NOTEXIST;
-  
+
+  mutex_lock(&fdc_mutex);
+
   fdc_select_drive(drive);
 
   /* recalibrate 2 times */
   fdc_cmd_recalibrate(drive);
   if((r=fdc_cmd_recalibrate(drive))<0) {
     fdc_motor_off(drive);
+    mutex_unlock(&fdc_mutex);
     return r;
   }
 
   /* set data rate for 144MBfloppydisk */
   fdc_set_data_rate( FDC_DRATE_500K );
 
+  mutex_unlock(&fdc_mutex);
   return 0; // success
 }
 
@@ -561,8 +566,12 @@ floppy_close(byte drive)
   if( drive >= FDC_NUM_DRIVE )
     return ERRNO_NOTEXIST;
   
+  mutex_lock(&fdc_mutex);
+
   /* motor off */
   fdc_motor_off(drive);
+
+  mutex_unlock(&fdc_mutex);
   return 0;
 }
 
@@ -575,7 +584,9 @@ floppy_write_sector( byte drive, void *buf, unsigned int sector, unsigned int co
 
   if( drive >= FDC_NUM_DRIVE )
     return ERRNO_NOTEXIST;
-  
+
+  mutex_lock(&fdc_mutex);
+
   /* change drive */
   fdc_select_drive( drive );
 
@@ -598,14 +609,18 @@ floppy_write_sector( byte drive, void *buf, unsigned int sector, unsigned int co
     END_CPULOCK();
 
     /* seek */
-    if( (r=fdc_cmd_seek(drive, h, c))<0 )
+    if( (r=fdc_cmd_seek(drive, h, c))<0 ) {
+      mutex_unlock(&fdc_mutex);
       return r;
-    
+    }
     /* write sector */
-    if( (r=fdc_cmd_write_data(drive, h, c, s))<0 )
+    if( (r=fdc_cmd_write_data(drive, h, c, s))<0 ) {
+      mutex_unlock(&fdc_mutex);
       return r;
+    }
   }
 
+  mutex_unlock(&fdc_mutex);
   return 0;
 }
 
@@ -619,7 +634,9 @@ floppy_read_sector( byte drive, void *buf, unsigned int sector, unsigned int cou
 
   if( drive >= FDC_NUM_DRIVE )
     return ERRNO_NOTEXIST;
-  
+
+  mutex_lock(&fdc_mutex);
+
   /* change drive */
   fdc_select_drive( drive );
 
@@ -639,13 +656,15 @@ floppy_read_sector( byte drive, void *buf, unsigned int sector, unsigned int cou
     END_CPULOCK();
 
     /* seek */
-    if( (r=fdc_cmd_seek(drive, h, c))<0)
+    if( (r=fdc_cmd_seek(drive, h, c))<0) {
+      mutex_unlock(&fdc_mutex);
       return r;
-    
+    }
     /* read sector */
-    if( (r=fdc_cmd_read_data(drive, h, c, s))<0)
+    if( (r=fdc_cmd_read_data(drive, h, c, s))<0) {
+      mutex_unlock(&fdc_mutex);
       return r;
-
+    }
 //  console_puts("fdc_dma_buffer=");
 //  for(ii=508;ii<508+8;ii++) {
 //    console_putc(numtohex1((((char*)fdc_dma_buffer)[ii]&0xf0)/16));
@@ -659,5 +678,6 @@ floppy_read_sector( byte drive, void *buf, unsigned int sector, unsigned int cou
     memcpy( buf + i*FDC_SECSIZE, fdc_dma_buffer, FDC_SECSIZE );
   }
 
+  mutex_unlock(&fdc_mutex);
   return 0;
 }

@@ -6,6 +6,7 @@
 #include "portunixstd.h"
 #include "memory.h"
 #include "bucket.h"
+#include "errno.h"
 
 #include "serv.h"
 #include "nxproto.h"
@@ -87,7 +88,14 @@ nxWriteSocket(char *buf, int todo)
 
 	do {
 #if HELLOOS
-		written = bucket_send(nxSocket, buf, todo);
+		int retry;
+
+		for(retry=0;retry<100;retry++) {
+			written = bucket_send(nxSocket, buf, todo);
+			if(written!=ERRNO_OVER)
+				break;
+			syscall_wait(10);
+		}
 #else
 		written = write(nxSocket, buf, todo);
 #endif
