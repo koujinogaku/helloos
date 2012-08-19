@@ -458,6 +458,7 @@ int program_list(int start, int count, struct kmem_program *plist)
       plist->id = pgm->id;
       plist->taskid = pgm->taskid;
       plist->status = task_get_status(pgm->taskid);
+      plist->tick   = task_get_tick(pgm->taskid);
       plist->exitque = pgm->exitque;
       plist->taskque = pgm->taskque;
       plist->pgd = pgm->pgd;

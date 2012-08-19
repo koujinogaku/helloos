@@ -42,6 +42,8 @@ void task_dispatch(void);
 void task_idle_process(void);
 void *task_get_fpu(int taskid);
 void task_set_fpu(int taskid,void *fpu);
+void task_tick(void);
+unsigned long task_get_tick(int taskid);
 
 void task_dbg_task(void *s);
 

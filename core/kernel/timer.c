@@ -66,6 +66,7 @@ void timer_intr(void)
 */
   alarm_check();
 
+  task_tick();
   task_dispatch();
 
   return;

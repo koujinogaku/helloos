@@ -369,7 +369,7 @@ void page_fault_handler( Excinfo info )
 {
   void *addr;
   addr = page_get_pgd();
-  if((int)addr==(int)page_system_pgd) {
+  if((int)addr==(int)page_system_pgd) { // Kernel Process
     console_puts("[cr3=");
     long2hex((unsigned int)addr,s);
     console_puts(s);

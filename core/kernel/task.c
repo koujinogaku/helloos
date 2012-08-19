@@ -57,6 +57,7 @@ struct TASK {
   unsigned short status;
   unsigned short exitcode;
   unsigned short lastfunc;
+  unsigned long tick;
 };
 
 static int task_dispatch_on=0;
@@ -130,7 +131,9 @@ console_puts("\n");
   task_new->tss.iobase = TASK_IOBASE;
   memset( &(task_new->tss.ioenable), 0xff, TASK_IOENABLE_SIZE );
 
+  task_new->fpu = 0;
   task_new->status = TASK_STAT_RUN;
+  task_new->tick = 0;
   list_add_tail(tasktbl, task_new);
   task_real_taskid = 1;
 
@@ -210,6 +213,7 @@ int task_create(void *task_func)
 
   task_new->fpu = 0;
   task_new->status = TASK_STAT_STOP;
+  task_new->tick = 0;
 
   cpu_hold_unlock(hold_locked);
   return taskid;
@@ -465,6 +469,20 @@ void task_dispatch_start(void)
 void task_dispatch_stop(void)
 {
   task_dispatch_on=0;
+}
+
+void task_tick(void)
+{
+  struct TASK *task_cur;
+  task_cur = tasktbl->next;
+  task_cur->tick++;
+}
+
+unsigned long task_get_tick(int taskid)
+{
+  struct TASK *task_cur;
+  task_cur = &(tasktbl[taskid]);
+  return task_cur->tick;
 }
 
 void task_dispatch(void)
