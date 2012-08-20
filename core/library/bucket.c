@@ -9,7 +9,7 @@
 #include "display.h"
 #include "environm.h"
 #include "kmessage.h"
-
+#include "stdlib.h"
 
 #define BUCKET_MAXDSC 128
 #define BUCKET_MAXBUF 8192
@@ -25,7 +25,11 @@
 #define BUCKET_ARG_DATA    2
 #define BUCKET_ARG_CLOSE   3
 
+#ifndef min
 #define min(a, b)       (a) < (b) ? a : b
+#endif
+
+#define BUCKET_QUEMAX 128
 
 union bucket_msg {
   struct msg_head h;
@@ -49,6 +53,11 @@ struct bucket_dsc {
   int mode;
 };
 
+struct bucket_quetbl {
+  int dsc;
+  int service;
+};
+
 typedef struct bucket_dsc BUCKET;
 
 static struct msg_head selected_msg;
@@ -58,7 +67,7 @@ static BUCKET **dsctbl=0;
 static int  *smtx=0;
 static char *hctl=0;
 static int alarm_command=BUCKET_ALARM_COMMAND;
-
+static struct bucket_quetbl *quetbl=0;
 
 void *bucket_malloc(unsigned long size)
 {
@@ -80,10 +89,17 @@ static int bucket_init_in(void)
 {
   int shmrc,rc;
 
-  dsctbl=malloc(sizeof(BUCKET*)*BUCKET_MAXDSC);
+  dsctbl=malloc(sizeof(BUCKET)*BUCKET_MAXDSC);
   if(dsctbl==0)
     return ERRNO_RESOURCE;
-  memset(dsctbl,0,sizeof(BUCKET*)*BUCKET_MAXDSC);
+  memset(dsctbl,0,sizeof(BUCKET)*BUCKET_MAXDSC);
+
+  quetbl=malloc(sizeof(struct bucket_quetbl)*BUCKET_QUEMAX);
+  if(quetbl==0)
+    return ERRNO_RESOURCE;
+  memset(quetbl,0,sizeof(struct bucket_quetbl)*BUCKET_QUEMAX);
+  for(rc=0;rc<BUCKET_QUEMAX;rc++)
+    quetbl[rc].dsc = -1;
 
   shmrc=shm_create(CFG_MEM_BUCKETHEAP,CFG_MEM_BUCKETHEAPSZ); // same name to map address
   if(shmrc<0 && shmrc!=ERRNO_INUSE)
@@ -132,6 +148,7 @@ int bucket_open(void)
   dsctbl[i]->dsc=i;
 
   dsctbl[i]->mode=BUCKET_MODE_OPEN;
+
   return i;
 }
 
@@ -158,6 +175,11 @@ int bucket_bind(int dsc, int que_name, int service)
     return rc;
 
   dsctbl[dsc]->mode=BUCKET_MODE_ACCEPT;
+
+  if(dsctbl[dsc]->dst_qid < BUCKET_QUEMAX) {
+    quetbl[dsctbl[dsc]->dst_qid].dsc = dsc;
+    quetbl[dsctbl[dsc]->dst_qid].service = service;
+  }
 
   return 0;
 }
@@ -203,6 +225,12 @@ int bucket_connect(int dsc, int que_name, int service)
     return ERRNO_CTRLBLOCK;
 
   dsctbl[dsc]->mode=BUCKET_MODE_DATA;
+
+  if(dsctbl[dsc]->dst_qid < BUCKET_QUEMAX) {
+    quetbl[dsctbl[dsc]->dst_qid].dsc = dsc;
+    quetbl[dsctbl[dsc]->dst_qid].service = service;
+  }
+
   return 0;
 }
 
@@ -253,6 +281,32 @@ int bucket_send(int dsc, void *buffer, int size)
   }
 
   return rc;
+}
+
+int bucket_find_dsc(int service, int queid)
+{
+  if(queid >= BUCKET_QUEMAX) {
+    return ERRNO_NOTEXIST;
+  }
+
+  if(quetbl[queid].dsc == -1) {
+    return ERRNO_NOTEXIST;
+  }
+  if(quetbl[queid].service != service) {
+    return ERRNO_NOTEXIST;
+  }
+
+  return quetbl[queid].dsc;
+}
+
+int bucket_has_block(int dsc)
+{
+  if(dsc<0 || dsc>=BUCKET_MAXDSC)
+    return ERRNO_NOTEXIST;
+  if(dsctbl[dsc]==0)
+    return ERRNO_NOTEXIST;
+
+  return dsctbl[dsc]->have_block;
 }
 
 int bucket_select(int fdsetsize, fd_set *rfds, unsigned long timeout)
@@ -396,6 +450,11 @@ int bucket_accept(int dsc)
   dsctbl[newdsc]->mode=BUCKET_MODE_DATA;
   dsctbl[dsc]->have_block=0;
 
+  if(dsctbl[newdsc]->dst_qid < BUCKET_QUEMAX) {
+    quetbl[dsctbl[newdsc]->dst_qid].dsc = newdsc;
+    quetbl[dsctbl[newdsc]->dst_qid].service = dsctbl[newdsc]->service;
+  }
+
   return newdsc;
 }
 
@@ -501,6 +560,11 @@ int bucket_close(int dsc)
   //rc=bucket_shutdown(dsc);
   //if(rc<0)
   //  return rc;
+
+  if(dsctbl[dsc]->dst_qid < BUCKET_QUEMAX) {
+    quetbl[dsctbl[dsc]->dst_qid].dsc = -1;
+    quetbl[dsctbl[dsc]->dst_qid].service = 0;
+  }
 
   mfree(dsctbl[dsc]);
   dsctbl[dsc]=0;

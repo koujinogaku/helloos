@@ -11,7 +11,7 @@
 #include "memory.h"
 #include "errno.h"
 
-#define USE_CACHE  0
+#define USE_CACHE  1
 
 
 #define MWINCLUDECOLORS

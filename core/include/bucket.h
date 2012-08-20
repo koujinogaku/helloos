@@ -16,6 +16,8 @@ int bucket_open(void);
 int bucket_bind(int dsc, int que_name, int service);
 int bucket_connect(int dsc, int que_name, int service);
 int bucket_accept(int dsc);
+int bucket_find_dsc(int service, int queid);
+int bucket_has_block(int dsc);
 int bucket_select(int fdsetsize, fd_set *rfds, unsigned long  timeout);
 void *bucket_selected_msg(void);
 int bucket_send(int dsc, void *buffer, int size);

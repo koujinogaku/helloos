@@ -82,7 +82,10 @@ int start(int argc, char *argv[])
     display_puts(strbuf);
     display_putc(' ');
 
-    percent = (cputimelist[i]*100)/cputimetotal;
+    if(cputimetotal)
+      percent = (cputimelist[i]*100)/cputimetotal;
+    else
+      percent = 0;
     int2dec(percent,strbuf);
     len=strlen(strbuf);
     for(j=0;j<3-len;j++)

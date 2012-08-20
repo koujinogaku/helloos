@@ -677,7 +677,7 @@ GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 
 
 // HELLO OS NONETWORK
-#if NONETWORK
+#if HELLOOS && NONETWORK
 void
 GsSelect(GR_TIMEOUT timeout)
 {
@@ -693,7 +693,7 @@ GsSelect(GR_TIMEOUT timeout)
 	}
 	syscall_wait(1);
 }
-#else /* BUCKET Network */
+#elif HELLOOS && !NONETWORK && defined(HAVESELECT)/* BUCKET Network */
 void
 GsSelect(GR_TIMEOUT timeout)
 {
@@ -701,7 +701,9 @@ GsSelect(GR_TIMEOUT timeout)
 	int 	e;
 	int	setsize = 0;
 	int r;
+#if 0
 	struct msg_head bucketmsg;
+#endif
 	unsigned long timeout_for_select;
 #if MW_FEATURE_TIMERS
 	struct timeval tout;
@@ -807,8 +809,128 @@ GsSelect(GR_TIMEOUT timeout)
 		EPRINTF("Select() call in main failed\n");
 
 
-#endif /* NONETWORK */
 }
+#elif HELLOOS && !NONETWORK && !defined(HAVESELECT)/* BUCKET Network */
+void
+GsSelect(GR_TIMEOUT timeout)
+{
+	int r,fd;
+	struct msg_head bucketmsg;
+#if MW_FEATURE_TIMERS
+	unsigned long timeout_for_select;
+	int timeout_alarm=0;
+	struct timeval tout;
+#endif /* MW_FEATURE_TIMERS */
+
+	/* perform pre-select duties, if any*/
+	if(rootwp->psd->PreSelect)
+		rootwp->psd->PreSelect(rootwp->psd);
+
+	/* Set up requester for use in the main message_receive(): */
+	r=keyboard_request_key();
+
+	/* handle client connections*/
+	curclient = root_client;
+	while(curclient) {
+		if(curclient->waiting_for_event && curclient->eventhead) {
+			curclient->waiting_for_event = FALSE;
+			GrGetNextEventWrapperFinish(curclient->id);
+			return;
+		}
+		curclient = curclient->next;
+	}
+
+	/* If data is present on the mouse fd, service it: */
+	if(mousedev.Poll()) {
+		GsCheckMouseEvent();
+	}
+
+	/* If data is present on the keyboard fd, service it: */
+	while(kbddev.Poll()) {
+		GsCheckKeyboardEvent();
+	}
+
+#if MW_FEATURE_TIMERS
+	/* Set up the timeout for the main select(): */
+	timeout_for_select=0;
+	if (timeout == (GR_TIMEOUT) -1L) {
+		/* poll*/
+		timeout_for_select=1;
+	} else {
+		if(GdGetNextTimeout(&tout, timeout) == TRUE) {
+			timeout_for_select = tout.tv_sec*1000 + tout.tv_usec/1000;
+			if(timeout_for_select==0)
+				timeout_for_select=1;
+		}
+	}
+
+	if(timeout_for_select != 0) {
+		timeout_alarm = syscall_alarm_set(timeout_for_select/10,environment_getqueid(), BUCKET_ALARM_COMMAND<<16);
+	}
+#endif /* MW_FEATURE_TIMERS */
+
+	bucketmsg.size=sizeof(struct msg_head);
+	r = message_poll(MESSAGE_MODE_WAIT, 0, 0, &bucketmsg);
+	if(r<0) {
+		EPRINTF("Select() call in main failed\n");
+		return;
+	}
+#if MW_FEATURE_TIMERS
+	if(timeout_for_select != 0) {
+		if(bucketmsg.service==MSG_SRV_ALARM && bucketmsg.command==BUCKET_ALARM_COMMAND) {
+			bucketmsg.size=sizeof(struct msg_head);
+			r=message_receive(MESSAGE_MODE_TRY, MSG_SRV_ALARM, BUCKET_ALARM_COMMAND, &bucketmsg);
+		}
+		else {
+			syscall_alarm_unset(timeout_alarm,environment_getqueid());
+		}
+	}
+#endif /* MW_FEATURE_TIMERS */
+
+	if(bucketmsg.service==WNX_SRV_WINDOW) {
+		fd=bucket_find_dsc(bucketmsg.service, bucketmsg.command);
+		if(fd<0) {
+			EPRINTF("Receive a dust block srv=%x,cmd=%x\n",bucketmsg.service,bucketmsg.command);
+			bucketmsg.size=sizeof(struct msg_head);
+			r=message_receive(MESSAGE_MODE_TRY, bucketmsg.service, bucketmsg.command, &bucketmsg);
+		}
+		else if(fd==un_sock) {
+				/* If a client is trying to connect, accept it: */
+				GsAcceptClient();
+		}
+		else {
+				/* If a client is sending us a command, handle it: */
+				/* msg->command ==> source qid ==> client id, becouse command-field can be used to select */
+
+				/* If a client is sending us a command, handle it: */
+				curclient = root_client;
+				while(curclient) {
+					GR_CLIENT *curclient_next;
+					/* curclient may be freed in GsDropClient*/
+					curclient_next = curclient->next;
+					if(fd==curclient->id) {
+						for(;;) {
+							GsHandleClient(curclient->id);
+							if(bucket_has_block(fd)<=0)
+								break;
+						}
+					}
+					curclient = curclient_next;
+				}
+		}
+	}
+	else if(bucketmsg.service==MSG_SRV_ALARM) {
+#if MW_FEATURE_TIMERS
+		GdTimeout();
+#endif
+	}
+	else if(bucketmsg.service!=KBD_SRV_KEYBOARD && bucketmsg.service!=MOU_SRV_MOUSE){
+			EPRINTF("Receive a dust block srv=%x,cmd=%x\n",bucketmsg.service,bucketmsg.command);
+			bucketmsg.size=sizeof(struct msg_head);
+			r=message_receive(MESSAGE_MODE_TRY, 0, 0, &bucketmsg);
+	}
+}
+#endif /* HELLOOS && !NONETWORK && !defined(HAVESELECT) */
 
 #if VTSWITCH
 static void

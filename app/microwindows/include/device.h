@@ -974,7 +974,7 @@ int	GdErrorNull(const char *format, ...);  /* doesn't print msgs */
 
 #if !_MINIX
 #ifndef __rtems__
-#define HAVESELECT	1	/* has select system call*/
+//#define HAVESELECT	1	/* has select system call*/
 #endif
 #endif
 
