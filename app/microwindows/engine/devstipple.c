@@ -6,9 +6,10 @@
  * Stipple and tile engine routines
  */
 #include "portunixstd.h"
-#include "device.h"
 #include "memory.h"
 #include "string.h"
+
+#include "device.h"
 
 extern MWPIXELVAL gr_foreground;	/* current foreground color */
 extern MWPIXELVAL gr_background;	/* current background color */
@@ -145,7 +146,7 @@ tile_drawrect(PSD psd, MWCOORD x, MWCOORD y, MWCOORD w, MWCOORD h)
 
 			GdBlit(psd, sx + px, sy + py, cw, ch, gr_tile.psd,
 			       ((tilex + px) % gr_tile.width),
-			       ((tiley + py) % gr_tile.height), MWROP_SRCCOPY);
+			       ((tiley + py) % gr_tile.height), MWROP_COPY);
 			dw -= cw;
 			px += cw;
 		}

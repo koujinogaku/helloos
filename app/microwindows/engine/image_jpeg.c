@@ -34,15 +34,21 @@
  * On some systems you may need to set up a signal handler to ensure that
  * temporary files are deleted if the program is interrupted.  See libjpeg.doc.
  */
-#include "portunixstd.h"
-#include "memory.h"
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <ctype.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "device.h"
+#include "swap.h"
 
 #if MW_FEATURE_IMAGES && defined(HAVE_JPEG_SUPPORT)
 #include "jpeglib.h"
 
-static buffer_t *inptr=0;
+static buffer_t *inptr;
 
 static void
 init_source(j_decompress_ptr cinfo)
@@ -95,13 +101,11 @@ GdDecodeJPEG(buffer_t * src, PMWIMAGEHDR pimage, PSD psd, MWBOOL fast_grayscale)
 
 	/* first determine if JPEG file since decoder will error if not */
 	GdImageBufferSeekTo(src, 0UL);
-	if (GdImageBufferRead(src, magic, 2) != 2
-	 || magic[0] != 0xFF || magic[1] != 0xD8)
+	if (GdImageBufferRead(src, magic, 2) != 2 || magic[0] != 0xFF || magic[1] != 0xD8)
 		return 0;	/* not JPEG image */
 
 	if (GdImageBufferRead(src, magic, 8) != 8
-	 || (strncmp(magic+4, "JFIF", 4) != 0
-          && strncmp(magic+4, "Exif", 4) != 0))
+	 || (strncmp((char *)&magic[4], "JFIF", 4) != 0 && strncmp((char *)&magic[4], "Exif", 4) != 0))
 		return 0;	/* not JPEG image */
 
 	GdImageBufferSeekTo(src, 0);

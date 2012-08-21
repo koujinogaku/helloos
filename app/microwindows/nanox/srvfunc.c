@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 1999, 2000, 2001, 2002, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2010 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Copyright (c) 2000 Alex Holden <alex@linuxhacker.org>
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  */
 #include "portunixstd.h"
 #include "memory.h"
@@ -16,27 +14,8 @@
 static int	nextid = GR_ROOT_WINDOW_ID + 1;
 
 static void CheckNextEvent(GR_EVENT *ep, GR_BOOL doCheckEvent);
-
-
-static char *strdup(char *src)
-{
-  char *d,*dst;
-
-  dst = d = malloc(strlen(src)+1);
-  if(d==0)
-    return d;
-
-  while(1) {
-    *dst = *src;
-    if(*src==0)
-      break;
-    src++;
-    dst++;
-  }
-
-  return dst;
-}
-
+static int IsUnobscuredBySiblings(GR_WINDOW *wp);
+ 
 /*
  * Return information about the screen for clients to use.
  */
@@ -109,9 +88,8 @@ GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 	/* If no event ready, wait for one*/
 	/* Note: won't work for multiple clients*/
 	/* This is OK, since only static linked apps call this function*/
-	while(curclient->eventhead == NULL) {
+	while(curclient->eventhead == NULL)
 		GsSelect(timeout);
-	}
 	CheckNextEvent(ep, GR_FALSE);
 	SERVER_UNLOCK();
 }
@@ -128,7 +106,120 @@ GrPeekWaitEvent(GR_EVENT *ep)
 	GrPeekEvent(ep);
 	SERVER_UNLOCK();
 }
-#endif
+
+/*
+ * Return the current length of the input queue.
+ */
+int 
+GrQueueLength(void)
+{
+	int count = 0;
+	GR_EVENT_LIST *elp;
+
+	SERVER_LOCK();
+	for (elp=curclient->eventhead; elp; elp=elp->next)
+		++count;
+	SERVER_UNLOCK();
+	return count;
+}
+
+/* builtin callback function for GrGetTypedEvent*/
+static GR_BOOL
+GetTypedEventCallback(GR_WINDOW_ID wid, GR_EVENT_MASK mask, GR_UPDATE_TYPE update,
+	GR_EVENT *ep, void *arg)
+{
+	GR_EVENT_MASK	emask = GR_EVENTMASK(ep->type);
+
+DPRINTF("GetTypedEventCallback: wid %d mask %x update %d from %d type %d\n", wid, (unsigned)mask, update, ep->general.wid, ep->type);
+
+	/* FIXME: not all events have wid field here... */
+	if (wid && (wid != ep->general.wid))
+		return 0;
+
+	if (mask) {
+		if ((mask & emask) == 0)
+			return 0;
+
+		if (update && ((mask & emask) == GR_EVENT_MASK_UPDATE))
+			if (update != ep->update.utype)
+				return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * Fills in the specified event structure with a copy of the next event on the
+ * queue that matches the type parameters passed and removes it from the queue.
+ * If block is GR_TRUE, the call will block until a matching event is found.
+ * Otherwise, only the local queue is searched, and an event type of
+ * GR_EVENT_TYPE_NONE is returned if the a match is not found.
+ */
+int
+GrGetTypedEvent(GR_WINDOW_ID wid, GR_EVENT_MASK mask, GR_UPDATE_TYPE update,
+	GR_EVENT *ep, GR_BOOL block)
+{
+	return GrGetTypedEventPred(wid, mask, update, ep, block,
+		GetTypedEventCallback, NULL);
+}
+
+/*
+ * The specified callback function is called with the passed event type parameters
+ * for each event on the queue, until the callback function CheckFunction
+ * returns GR_TRUE.  The event is then removed from the queue and returned.
+ * If block is GR_TRUE, the call will block until a matching event is found.
+ * Otherwise, only the local queue is searched, and an event type of
+ * GR_EVENT_TYPE_NONE is returned if a match is not found.
+ */
+int
+GrGetTypedEventPred(GR_WINDOW_ID wid, GR_EVENT_MASK mask, GR_UPDATE_TYPE update,
+	GR_EVENT *ep, GR_BOOL block, GR_TYPED_EVENT_CALLBACK matchfn, void *arg)
+{
+	GR_EVENT_LIST *elp, *prevelp;
+
+	SERVER_LOCK();
+	/* determine if we need to wait for any events*/
+	while(curclient->eventhead == NULL) {
+getevent:
+		GsSelect(block? 0L: -1L); /* wait/poll for event*/
+		if (!block)
+			break;
+	}
+
+	/* Now, run through the event queue, looking for matches of the type
+	 * info that was passed.
+	 */
+	prevelp = NULL;
+	elp = curclient->eventhead;
+	while (elp) {
+		if (matchfn(wid, mask, update, &elp->event, arg)) {
+			/* remove event from queue, return it*/
+			if (prevelp == NULL)
+				curclient->eventhead = elp->next;
+			else prevelp->next = elp->next;
+			if (curclient->eventtail == elp)
+				curclient->eventtail = NULL;
+			elp->next = eventfree;
+			eventfree = elp;
+
+			*ep = elp->event;
+			SERVER_UNLOCK();
+			return ep->type;
+		}
+		prevelp = elp;
+		elp = elp->next;
+	}
+
+	/* if event still not found and waiting ok, then wait*/
+	if (block)
+		goto getevent;
+
+	/* return no event*/
+	ep->type = GR_EVENT_TYPE_NONE;
+	SERVER_UNLOCK();
+	return GR_EVENT_TYPE_NONE;
+} 
+#endif /* NONETWORK*/
 
 /*
  * Return the next event from the event queue if one is ready.
@@ -155,9 +246,8 @@ CheckNextEvent(GR_EVENT *ep, GR_BOOL doCheckEvent)
 		GsSelect(1L);
 #endif
 	/* Copy first event if any*/
-	if(!GrPeekEvent(ep)) {
+	if(!GrPeekEvent(ep))
 		return;
-	}
 
 	/* Get first event again*/
 	elp = curclient->eventhead;
@@ -172,9 +262,14 @@ CheckNextEvent(GR_EVENT *ep, GR_BOOL doCheckEvent)
 	curclient->eventhead = elp->next;
 	if (curclient->eventtail == elp)
 		curclient->eventtail = NULL;
-
 	elp->next = eventfree;
 	eventfree = elp;
+
+#if (NONETWORK && NANOWM)
+	/* let inline window manager look at event*/
+	if (wm_handle_event(ep))
+		ep->type = GR_EVENT_TYPE_NONE;
+#endif
 }
 
 /*
@@ -491,6 +586,25 @@ DeliverUpdateMoveEventAndChildren(GR_WINDOW *wp)
 		DeliverUpdateMoveEventAndChildren(childwp);
 }
 
+static int
+IsUnobscuredBySiblings(GR_WINDOW *wp)
+{
+	GR_WINDOW *current, *parent, *child;
+
+	for (current=wp; current; current=parent) {
+		parent = current->parent;
+		if (!parent)
+			break;
+		for (child=parent->children; child; child=child->siblings) {
+			if (child == current)
+				break;
+			else if (GsCheckOverlap(child, wp))
+				return 0;
+		}
+	}
+	return 1;
+}
+
 /*
  * Move the window to the specified position relative to its parent.
  */
@@ -498,6 +612,7 @@ void
 GrMoveWindow(GR_WINDOW_ID wid, GR_COORD x, GR_COORD y)
 {
 	GR_WINDOW	*wp;		/* window structure */
+	GR_WINDOW	*parent;
 	GR_COORD	offx, offy;
 
 	SERVER_LOCK();
@@ -513,8 +628,9 @@ GrMoveWindow(GR_WINDOW_ID wid, GR_COORD x, GR_COORD y)
 		return;
 	}
 
-	x += wp->parent->x;
-	y += wp->parent->y;
+	parent = wp->parent;
+	x += parent->x;
+	y += parent->y;
 	offx = x - wp->x;
 	offy = y - wp->y;
 
@@ -523,8 +639,71 @@ GrMoveWindow(GR_WINDOW_ID wid, GR_COORD x, GR_COORD y)
 		return;
 	}
 
-	/* * move algorithms not requiring unmap/map ***/
+	/*
+	 * move algorithms not requiring unmap/map
+	 */
+
 #if 1
+	/* perform screen blit if topmost and mapped - no flicker!*/
+	if (wp->mapped && IsUnobscuredBySiblings(wp)
+		/* temp don't blit in portrait mode, still buggy*/
+		/* *&& !(wp->psd->portrait & (MWPORTRAIT_LEFT|MWPORTRAIT_RIGHT))***/
+
+		/* don't blit if window has custom frame, background not right*/
+		&& !wp->clipregion
+	   ) {
+		int 		oldx = wp->x;
+		int 		oldy = wp->y;
+		GR_GC_ID	gc = GrNewGC();
+		GR_WINDOW * 	stopwp = wp;
+		int		X, Y, W, H;
+
+		/* must hide cursor first or GdFixCursor() will show it*/
+		GdHideCursor(rootwp->psd);
+
+		/* turn off clipping of root's children*/
+		GrSetGCMode(gc, GR_MODE_COPY|GR_MODE_EXCLUDECHILDREN);
+
+		/* calc new window offsets*/
+		OffsetWindow(wp, offx, offy);
+
+		/* force recalc of clip region*/
+		clipwp = NULL;
+
+		/* copy window bits to new location*/
+		GrCopyArea(parent->id, gc, wp->x - parent->x, wp->y - parent->y,
+			wp->width, wp->height, parent->id,
+			oldx - parent->x, oldy - parent->y, MWROP_COPY);
+
+		/*
+		 * If any portion of the window was offscreen
+		 * and is coming onscreen, must send expose events
+		 * to this window as well.
+		 */
+		if ((oldx < 0 && wp->x > oldx) ||
+		    (oldy < 0 && wp->y > oldy) ||
+		    (oldx+wp->width > rootwp->width && wp->x < oldx) ||
+		    (oldy+wp->height > rootwp->height && wp->y < oldy))
+			stopwp = NULL;
+
+		/* 
+		 * Calculate bounded exposed area and
+		 * redraw anything lower than stopwp window.
+		 */
+		X = MWMIN(oldx, wp->x);
+		Y = MWMIN(oldy, wp->y);
+		W = MWMAX(oldx, wp->x) + wp->width - X;
+		H = MWMAX(oldy, wp->y) + wp->height - Y;
+		GsExposeArea(rootwp, X, Y, W, H, stopwp);
+
+		GdShowCursor(rootwp->psd);
+		GrDestroyGC(gc);
+		DeliverUpdateMoveEventAndChildren(wp);
+		SERVER_UNLOCK();
+		return;
+	}
+#endif
+#if 0
 	/* perform screen blit if topmost and mapped - no flicker!*/
 	if (wp->mapped && wp == wp->parent->children
 		&& wp->parent->id == GR_ROOT_WINDOW_ID
@@ -633,6 +812,7 @@ void
 GrResizeWindow(GR_WINDOW_ID wid, GR_SIZE width, GR_SIZE height)
 {
 	GR_WINDOW	*wp;		/* window structure */
+	GR_COORD	oldw, oldh;
 
 	SERVER_LOCK();
 
@@ -664,6 +844,23 @@ GrResizeWindow(GR_WINDOW_ID wid, GR_SIZE width, GR_SIZE height)
 		return;
 	}
 
+#if 1
+    oldw = wp->width;
+	oldh = wp->height;
+	wp->width = width;
+	wp->height = height;
+	if (wp->output) {
+		GsDrawBorder(wp);
+		GsWpClearWindow(wp, 0, 0, wp->width, wp->height, GR_TRUE);
+	}
+	GsDeliverUpdateEvent(wp, GR_UPDATE_SIZE, wp->x, wp->y, width, height);
+	if (oldw > width || oldh > height) {
+		int bs = wp->bordersize;
+		GsExposeArea(wp->parent, wp->x - bs, wp->y - bs,
+			oldw + bs * 2, oldh + bs * 2, NULL);
+	}
+#endif
+#if 0
 	/*
 	 * This should be optimized to not require redrawing of the window
 	 * when possible.
@@ -674,7 +871,7 @@ GrResizeWindow(GR_WINDOW_ID wid, GR_SIZE width, GR_SIZE height)
 	/* send size update before expose event*/
 	GsDeliverUpdateEvent(wp, GR_UPDATE_SIZE, wp->x, wp->y, width, height);
 	GsWpRealizeWindow(wp, GR_FALSE);
-
+#endif
 	SERVER_UNLOCK();
 }
 
@@ -1392,13 +1589,20 @@ GrGetRegionBox(GR_REGION_ID region, GR_RECT *rect)
 	return ret_val;
 }
 
+/* DEPRECATED - use GrCreateFontEx*/
+GR_FONT_ID
+GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
+{
+	return GrCreateFontEx(name, height, height, plogfont);
+}
+
 static int nextfontid = 1000;
 /*
  * Allocate a new GC with default parameters.
  * The GC is owned by the current client.
  */
 GR_FONT_ID
-GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
+GrCreateFontEx(GR_CHAR *name, GR_COORD height, GR_COORD width, GR_LOGFONT *plogfont)
 {
 	GR_FONT	*fontp;
 
@@ -1412,9 +1616,9 @@ GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
 	}
 
 	if (plogfont)
-		fontp->pfont = GdCreateFont(&scrdev, NULL, 0, plogfont);
+		fontp->pfont = GdCreateFont(&scrdev, NULL, 0, 0, plogfont);
 	else
-		fontp->pfont = GdCreateFont(&scrdev, (const char *)name, height, NULL);
+		fontp->pfont = GdCreateFont(&scrdev, (const char *)name, height, width, NULL);
 
 	/* if no font created, deallocate and return ID 0*/
 	if (!fontp->pfont) {
@@ -1439,8 +1643,8 @@ GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
  * The font is owned by the current client.
  */
 GR_FONT_ID
-GrCreateFontFromBuffer(const void *buffer, unsigned length,
-		       const char *format, GR_COORD height)
+GrCreateFontFromBuffer(const void *buffer, unsigned length, const char *format,
+	GR_COORD height, GR_COORD width)
 {
 	GR_FONT *fontp;
 
@@ -1458,8 +1662,7 @@ GrCreateFontFromBuffer(const void *buffer, unsigned length,
 	 *         (char) buffer[2], (char) buffer[3], length);
 	 */
 
-	fontp->pfont = GdCreateFontFromBuffer(&scrdev, buffer, length, format,
-				       height);
+	fontp->pfont = GdCreateFontFromBuffer(&scrdev, buffer, length, format, height, width);
 	if (fontp->pfont == NULL) {
 		/* Error loading font, probably corrupt data or unsupported format. */
 		free(fontp);
@@ -1481,7 +1684,7 @@ GrCreateFontFromBuffer(const void *buffer, unsigned length,
  * The font is owned by the current client.
  */
 GR_FONT_ID
-GrCopyFont(GR_FONT_ID fontid, GR_COORD height)
+GrCopyFont(GR_FONT_ID fontid, GR_COORD height, GR_COORD width)
 {
 	GR_FONT *srcfontp;
 	GR_FONT *fontp;
@@ -1497,9 +1700,9 @@ GrCopyFont(GR_FONT_ID fontid, GR_COORD height)
 
 	srcfontp = GsFindFont(fontid);
 	if (srcfontp)
-		fontp->pfont = GdDuplicateFont(&scrdev, srcfontp->pfont,height);
+		fontp->pfont = GdDuplicateFont(&scrdev, srcfontp->pfont, height, width);
 	else
-		fontp->pfont = GdCreateFont(&scrdev, NULL, height, NULL);
+		fontp->pfont = GdCreateFont(&scrdev, NULL, height, width, NULL);
 
 	fontp->id = nextfontid++;
 	fontp->owner = curclient;
@@ -1511,9 +1714,16 @@ GrCopyFont(GR_FONT_ID fontid, GR_COORD height)
 }
 #endif /*HAVE_FREETYPE_2_SUPPORT*/
 
+/* DEPRECATED - use GrSetFontSizeEx*/
+void
+GrSetFontSize(GR_FONT_ID fontid, GR_COORD height)
+{
+	GrSetFontSizeEx(fontid, height, height);
+}
+
 /* Set the font size for the passed font*/
 void
-GrSetFontSize(GR_FONT_ID fontid, GR_COORD size)
+GrSetFontSizeEx(GR_FONT_ID fontid, GR_COORD height, GR_COORD width)
 {
 	GR_FONT		*fontp;
 
@@ -1521,7 +1731,7 @@ GrSetFontSize(GR_FONT_ID fontid, GR_COORD size)
 
 	fontp = GsFindFont(fontid);
 	if (fontp)
-		GdSetFontSize(fontp->pfont, size);
+		GdSetFontSize(fontp->pfont, height, width);
 
 	SERVER_UNLOCK();
 }
@@ -1809,7 +2019,7 @@ GrNewPixmap(GR_SIZE width, GR_SIZE height, void * pixels)
 {
 	GR_PIXMAP	*pp;
 	PSD		psd;
-        int 		size, linelen, bpp, planes;
+	int 		size, linelen, bpp, planes;
 	GR_WINDOW_ID id;
    
 	if (width <= 0 || height <= 0) {
@@ -1827,7 +2037,7 @@ GrNewPixmap(GR_SIZE width, GR_SIZE height, void * pixels)
 	 */
 	planes = rootwp->psd->planes;
 	bpp = rootwp->psd->bpp;
-        psd = rootwp->psd->AllocateMemGC(rootwp->psd);
+	psd = rootwp->psd->AllocateMemGC(rootwp->psd);
 	if (!psd) {
 		SERVER_UNLOCK();
 		return 0;
@@ -1841,10 +2051,10 @@ GrNewPixmap(GR_SIZE width, GR_SIZE height, void * pixels)
 		return 0;
 	}
 
-        GdCalcMemGCAlloc(psd, width, height, 0, 0, &size, &linelen);
+	GdCalcMemGCAlloc(psd, width, height, 0, 0, &size, &linelen);
 
 	/* Allocate space for pixel values */
-        if (!pixels) {
+	if (!pixels) {
 	        pixels = calloc(size, 1);
 		psd->flags |= PSF_ADDRMALLOC;
 	}
@@ -1865,11 +2075,9 @@ GrNewPixmap(GR_SIZE width, GR_SIZE height, void * pixels)
 	pp->height = height;
 	pp->owner = curclient;
 
-        psd->MapMemGC(psd, width, height, planes, bpp, linelen, size,
-		pixels);
-	
-        listpp = pp;
-	
+	psd->MapMemGC(psd, width, height, planes, bpp, linelen, size, pixels);
+
+	listpp = pp;
 	id = pp->id;
 	
 	SERVER_UNLOCK();
@@ -1894,6 +2102,7 @@ GrMapWindow(GR_WINDOW_ID wid)
 	}
 
 	wp->mapped = GR_TRUE;
+
 	GsWpRealizeWindow(wp, GR_FALSE);
 
 	SERVER_UNLOCK();
@@ -2341,7 +2550,7 @@ void
 GrSetGCDash(GR_GC_ID gc, char *dashes, int count)
 {
 	GR_GC *gcp;
-	unsigned long dmask = 0;
+	uint32_t dmask = 0;
 	int dcount = 0;
 	int onoff = 1;
 	int i;
@@ -2881,6 +3090,27 @@ GrDrawImageToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 	SERVER_UNLOCK();
 }
 
+/* draw part of the cached image*/
+void
+GrDrawImagePartToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD dx, GR_COORD dy,
+	GR_SIZE dwidth, GR_SIZE dheight, GR_COORD sx, GR_COORD sy,
+	GR_SIZE swidth, GR_SIZE sheight, GR_IMAGE_ID imageid)
+{
+	GR_DRAWABLE	*dp;
+	SERVER_LOCK();
+
+	switch (GsPrepareDrawing(id, gc, &dp)) {
+		case GR_DRAW_TYPE_WINDOW:
+ 	        case GR_DRAW_TYPE_PIXMAP:
+			GdDrawImagePartToFit(dp->psd, dp->x + dx, dp->y + dy,
+				dwidth, dheight,sx,sy,swidth,sheight, imageid);
+			break;
+	   
+	}
+
+	SERVER_UNLOCK();
+}
+
 /* free cached image*/
 void
 GrFreeImage(GR_IMAGE_ID id)
@@ -2954,7 +3184,7 @@ GrArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 void
 GrCopyArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 	GR_SIZE width, GR_SIZE height, GR_DRAW_ID srcid,
-	GR_COORD srcx, GR_COORD srcy, unsigned long op)
+	GR_COORD srcx, GR_COORD srcy, int op)
 {
   	GR_GC		*gcp;
 	GR_BOOL         exposure = GR_TRUE;
@@ -3025,7 +3255,7 @@ GrCopyArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 		 * exposure event instead for proper display.
 		 */
 		if (GdRectInRegion(clipregion, &rc) != MWRECT_ALLIN) {
-EPRINTF("nano-X: skipping blit, sending expose event\n");
+//EPRINTF("nano-X: skipping blit, sending expose event\n");
 			GsDeliverExposureEvent(swp, dp->x+x, dp->y+y,
 				width, height);
 			SERVER_UNLOCK();
@@ -3037,11 +3267,7 @@ EPRINTF("nano-X: skipping blit, sending expose event\n");
 	if (op == MWROP_USE_GC_MODE) {
 		GR_GC *gcp = GsFindGC(gc);
 
-		if (gcp == NULL) {
-			op = MWROP_COPY;
-		} else {
-			op = MWMODE_TO_ROP(gcp->mode);
-		}
+		op = gcp? gcp->mode: MWROP_COPY;
 	}
 
 	/* perform blit*/
@@ -3393,7 +3619,7 @@ GrSetWMProperties(GR_WINDOW_ID wid, GR_WM_PROPERTIES *props)
 
 		/* Calculate the space needed to store the new title */
 		if(props->title)
-			tl = strlen((char *)props->title) + 1;
+			tl = strlen((const char *)props->title) + 1;
 
 		/* Check for empty title*/
 		if(!props->title || tl == 1) {
@@ -3465,10 +3691,15 @@ GrGetWMProperties(GR_WINDOW_ID wid, GR_WM_PROPERTIES *props)
 		GR_WM_FLAGS_BACKGROUND | GR_WM_FLAGS_BORDERSIZE |
 		GR_WM_FLAGS_BORDERCOLOR;
 	props->props = wp->props;
-	props->title = wp->title;
 	props->background = wp->background;
 	props->bordersize = wp->bordersize;
 	props->bordercolor = wp->bordercolor;
+	/* alloc space and copy window title*/
+	if (wp->title) {
+		props->title = malloc(strlen((char*)(wp->title))+1);
+		if (props->title)
+			strcpy(props->title, wp->title);
+	} else props->title = NULL;
 
 	SERVER_UNLOCK();
 }
@@ -3544,7 +3775,7 @@ GrKillWindow(GR_WINDOW_ID wid)
 
 #define MAXSYSCOLORS	20	/* # of GR_COLOR_* system colors*/
 
-static GR_COLOR sysColors[MAXSYSCOLORS] = {
+static const GR_COLOR sysColors[MAXSYSCOLORS] = {
 	/* desktop background*/
 	GR_RGB(  0, 128, 128),  /* GR_COLOR_DESKTOP             */
 
@@ -3640,20 +3871,19 @@ GrSetSelectionOwner(GR_WINDOW_ID wid, GR_CHAR *typelist)
 	GR_WINDOW_ID oldwid = selection_owner.wid;
 
 	SERVER_LOCK();
-
-	if(selection_owner.typelist) free(selection_owner.typelist);
+	if(selection_owner.typelist)
+		free(selection_owner.typelist);
+	selection_owner.typelist = NULL;
 
 	selection_owner.wid = wid;
-
-	if(wid) {
-		if(!(selection_owner.typelist = (GR_CHAR *)strdup((char *)typelist))) {
+	if (wid) {
+		if(!(selection_owner.typelist = (GR_CHAR *)strdup((const char *)typelist))) {
 			GsError(GR_ERROR_MALLOC_FAILED, wid);
 			selection_owner.wid = 0;
 		}
-	} else selection_owner.typelist = NULL;
+	}
 
 	GsDeliverSelectionChangedEvent(oldwid, wid);
-
 	SERVER_UNLOCK();
 }
 
@@ -3683,19 +3913,8 @@ void
 GrSendClientData(GR_WINDOW_ID wid, GR_WINDOW_ID did, GR_SERIALNO serial,
 				GR_LENGTH len, GR_LENGTH thislen, void *data)
 {
-	void *p;
-
 	SERVER_LOCK();
-
-	if(!(p = malloc(len))) {
-		GsError(GR_ERROR_MALLOC_FAILED, wid);
-		SERVER_UNLOCK();
-		return;		/* FIXME note no error to application*/
-	}
-	memcpy(p, data, thislen);
-
-	GsDeliverClientDataEvent(did, wid, serial, len, thislen, p);
-
+	GsDeliverClientDataEvent(did, wid, serial, len, thislen, data);
 	SERVER_UNLOCK();
 }
 
@@ -3745,26 +3964,19 @@ GrFreeFontList(GR_FONTLIST ***fonts, int numfonts)
 }
 
 /*
- * Copy and stretch a rectangle.
+ * Draw and stretch a rectangular area from source drawable to destination drawable
  */
 void
-GrStretchArea(GR_DRAW_ID dstid, GR_GC_ID gc,
-	      GR_COORD dx1, GR_COORD dy1,
-	      GR_COORD dx2, GR_COORD dy2,
-	      GR_DRAW_ID srcid,
-	      GR_COORD sx1, GR_COORD sy1,
-	      GR_COORD sx2, GR_COORD sy2,
-	      unsigned long op)
+GrStretchArea(GR_DRAW_ID dstid, GR_GC_ID gc, GR_COORD dx1, GR_COORD dy1, GR_COORD dx2, GR_COORD dy2,
+	GR_DRAW_ID srcid, GR_COORD sx1, GR_COORD sy1, GR_COORD sx2, GR_COORD sy2, int op)
 {
 	GR_DRAWABLE *dp;
 	GR_WINDOW *swp;
 	GR_PIXMAP *spp = NULL;
+	PSD srcpsd = NULL;
 	GR_DRAW_TYPE type;
-	PSD srcpsd;
 
 	SERVER_LOCK();
-
-	srcpsd = NULL;
 
 	type = GsPrepareDrawing(dstid, gc, &dp);
 	if (type == GR_DRAW_TYPE_NONE) {
@@ -3795,26 +4007,16 @@ GrStretchArea(GR_DRAW_ID dstid, GR_GC_ID gc,
 	}
 
 	if (op == MWROP_USE_GC_MODE) {
-		GR_GC *gcp;
-		gcp = GsFindGC(gc);
-		if (gcp == NULL) {
-			op = MWROP_COPY;
-		} else {
-			op = MWMODE_TO_ROP(gcp->mode);
-		}
+		GR_GC *gcp = GsFindGC(gc);
+
+		op = gcp? gcp->mode: MWROP_COPY;
 	}
 
 	/* perform blit */
-
-	/* DPRINTF("Nano-X: GrStretchArea() calling GdStretchBlit()\n"); */
+	/* DPRINTF("Nano-X: GrStretchArea() calling GdStretchBlitEx()\n"); */
 	//GdCheckCursor(srcpsd, s1x, s1y, s2x, s2y); /* FIXME*/
-	/*GdStretchBlit(dp->psd, dx, dy, dw, dh,
-	   srcpsd,  sx, sy, sw, sh,
-	   op); */
-	GdStretchBlitEx(dp->psd, dx1, dy1, dx2, dy2,
-			srcpsd, sx1, sy1, sx2, sy2, op);
-	/* DPRINTF("Nano-X: GrStretchArea() done GdStretchBlitEx()\n"); */
-	//GdFixCursor(srcpsd); /* FIXME*/
+	GdStretchBlitEx(dp->psd, dx1, dy1, dx2, dy2, srcpsd, sx1, sy1, sx2, sy2, op);
+	//GdFixCursor(srcpsd);
 
 	SERVER_UNLOCK();
 }

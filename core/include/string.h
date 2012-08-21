@@ -12,7 +12,7 @@ void *memmove( void *dest, const void *src, unsigned int n );
 void *strncpy( void *dest, const void *src, unsigned int n );
 int strncmp( void *dest, const void *src, unsigned int n );
 int strncmpi( void *dest, const void *src, unsigned int n );
-int strlen(char *chr);
+int strlen(const char *chr);
 
 void int2dec(unsigned int memsz, char *buff);
 void sint2dec(int num, char *str);
@@ -27,5 +27,6 @@ int dbl2dec(double val, char *str, int width);
 char *strrchr(const char *str, char ch);
 char *strcat(char *str1, const char *str2);
 int strcmp( void *dest, const void *src);
+char *strdup(const char *src);
 
 #endif

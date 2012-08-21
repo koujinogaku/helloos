@@ -28,6 +28,7 @@
  */
 
 /* for definitions of calloc, malloc, realloc, and free */
+//#include <stdlib.h>
 
 #define GdMalloc(size)                  malloc((size))
 #define GdCalloc(num,size)              calloc((num),(size))

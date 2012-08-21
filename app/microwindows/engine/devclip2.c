@@ -1,13 +1,11 @@
 /*
  * Copyright (c) 2000 Greg Haerr <greg@censoft.com>
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * DYNAMICREGIONS Device-independent routines to set clipping regions.
  */
-
 #include "memory.h"
+
 #include "device.h"
 
 /* Clip cache rectangle information.

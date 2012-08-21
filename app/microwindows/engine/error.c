@@ -9,27 +9,38 @@
  */
 
 #include "portunixstd.h"
-#include "device.h"
 #include "stdarg.h"
 #include "print.h"
+
+#include "device.h"
 
 #if MW_FEATURE_GDERROR
 /**
  * Write error message to stderr stream.
  */
-
 int
 GdError(const char *format, ...)
 {
 	va_list args;
-	char 	buf[1024];
-
 	va_start(args, format);
+#if __ECOS
+	/* diag_printf() has much less dependencies than write() */
+	diag_printf(format, args);
+#else
+	{
+		char 	buf[1024];
+		vsprintf(buf, format, args);
+#if PSP
+		pspDebugScreenPrintf("%s\n", buf);
+#elif HELLOOS
+		display_puts(buf);
+#else
+		write(2, buf, strlen(buf));
+#endif
+	}
+#endif
 
-	vsprintf(buf, format, args);
-//	write(2, buf, strlen(buf));
 	va_end(args);
-	display_puts(buf);
 	return -1;
 }
 

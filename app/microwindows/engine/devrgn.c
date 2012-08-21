@@ -83,9 +83,10 @@ SOFTWARE.
  * the y-x-banding that's so nice to have...
  */
 #include "portunixstd.h"
-#include "device.h"
 #include "memory.h"
 #include "string.h"
+
+#include "device.h"
 
 typedef void (*REGION_OverlapBandFunctionPtr) (MWCLIPREGION * pReg, MWRECT * r1,
     MWRECT * r1End, MWRECT * r2, MWRECT * r2End, MWCOORD top, MWCOORD bottom);

@@ -1,13 +1,10 @@
 /*
- * Copyright (c) 1999, 2000, 2002, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2002, 2003, 2010 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002, 2003 by Koninklijke Philips Electronics N.V.
  * Copyright (c) 1999, 2000 Alex Holden <alex@linuxhacker.org>
  * Copyright (c) 1991 David I. Bell
  * Copyright (c) 2000 Vidar Hokstad
  * Copyright (c) 2000 Morten Rolland <mortenro@screenmedia.no>
- *
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Client routines to do graphics with windows and graphics contexts.
  *
@@ -63,7 +60,7 @@ static fd_set regfdset;
 /**
  * Human-readable error strings.
  */
-char *nxErrorStrings[] = {
+const char *nxErrorStrings[] = {
 	GR_ERROR_STRINGS
 };
 
@@ -76,7 +73,6 @@ static EVENT_LIST *	evlist=0;
  * will only be called when the client asks for events.
  */
 static GR_FNCALLBACKEVENT ErrorFunc = GrDefaultErrorHandler;
-
 
 static void QueueEvent(GR_EVENT *ep);
 static void GetNextQueuedEvent(GR_EVENT *ep);
@@ -105,10 +101,10 @@ ReadBlock(void *b, int n)
 
 	nxFlushReq(0L,0);
 	while(v < ((char *) b + n)) {
-#if HELLOOS
-		i = bucket_recv(nxSocket, v, ((char *) b + n - v));
-#else
+#if !HELLOOS
 		i = read(nxSocket, v, ((char *) b + n - v));
+#else
+		i = bucket_recv(nxSocket, v, ((char *) b + n - v));
 #endif
 		if ( i <= 0 ) {
 			if ( i == 0 ) {
@@ -119,12 +115,13 @@ ReadBlock(void *b, int n)
 					"server\n");
 				exit(1);
 			}
-#if HELLOOS
-			EPRINTF("nxclient: bad readblock %d, errno %d\n", i, i);
-#else
+#if !HELLOOS
 			if ( errno == EINTR || errno == EAGAIN )
 				continue;
+
 			EPRINTF("nxclient: bad readblock %d, errno %d\n", i, errno);
+#else
+			EPRINTF("nxclient: bad readblock %d, errno %d\n", i, i);
 #endif
 			return -1;
 		}
@@ -172,7 +169,8 @@ CheckForClientData(GR_EVENT *evp)
 			event->data = NULL;
 			return;
 		}
-		if(!(event->data = malloc(event->datalen))) return;
+		if(!(event->data = malloc(event->datalen)))
+			return;
 		ReadBlock(event->data, event->datalen);
 	}
 }
@@ -298,7 +296,8 @@ GrOpen(void)
 #else
 #error "ADDR_FAM not defined to AF_NANO, AF_INET or AF_UNIX"
 #endif
-#endif
+#endif /*!HELLOOS */
+
 	ACCESS_PER_THREAD_DATA()
 	
 	/* check already open*/
@@ -306,10 +305,10 @@ GrOpen(void)
         	return nxSocket;
 
 	/* try to get socket*/
-#if HELLOOS
-	if ((nxSocket = bucket_open()) < 0)
-#else
+#if !HELLOOS
 	if ((nxSocket = socket(ADDR_FAM, SOCK_STREAM, 0)) == -1)
+#else
+	if ((nxSocket = bucket_open()) < 0)
 #endif
 		return -1;
 
@@ -338,19 +337,15 @@ GrOpen(void)
 	size = (offsetof(struct sockaddr_un, sun_path) +
 		strlen(name.sun_path) + 1);
 #endif
-#endif
+#endif /* !HELLOOS */
 	/*
 	 * Try to open the connection ten times,
 	 * waiting 0.1 or 2.0 seconds between attempts.
 	 */
 	for (tries=1; tries<=10; ++tries) {
-#if HELLOOS
-		ret = bucket_connect(nxSocket, NX_QNM_BUCKET, NX_SRV_BUCKET);
-		if (ret >= 0)
-			break;
-		syscall_wait(2);
-#else
+#if !HELLOOS
 		struct timespec req;
+
 		ret = connect(nxSocket, (struct sockaddr *) &name, size);
 
 		if (ret >= 0)
@@ -358,20 +353,26 @@ GrOpen(void)
 #if ADDR_FAM == AF_INET
 		req.tv_sec = 0;
 		req.tv_nsec = 100000000L;
-#else // ADDR_FAM
+#else
 		req.tv_sec = 2;
 		req.tv_nsec = 0;
-#endif //ADDR_FAM
+#endif
 		nanosleep(&req, NULL);
-#endif // HELLOOS
+#else /*!HELLOOS*/
+		ret = bucket_connect(nxSocket, NX_QNM_BUCKET, NX_SRV_BUCKET);
+		if (ret >= 0)
+			break;
+		syscall_wait(2);
+#endif /*!HELLOOS*/
+
 		EPRINTF("nxclient: retry connect attempt %d\n", tries);
 	}
 	if (ret == -1) {
-#if HELLOOS
-		bucket_close(nxSocket);
-#else
+#if !HELLOOS
 		close(nxSocket);
-#endif // HELLOOS
+#else
+		bucket_close(nxSocket);
+#endif /*!HELLOOS*/
 		nxSocket = -1;
 		return -1;
 	}
@@ -438,12 +439,12 @@ GrClose(void)
 	alarm(0);
 	signal(SIGALRM, oldSignalHandler);
 #endif
-#if HELLOOS
+#if !HELLOOS
+	close(nxSocket);
+#else
 	//bucket_shutdown(nxSocket);
 	bucket_close(nxSocket);
-#else
-	close(nxSocket);
-#endif
+#endif /*HELLOOS*/
 	nxSocket = -1;
 	LOCK_FREE(&nxGlobalLock);
 }
@@ -525,18 +526,18 @@ GrSetErrorHandler(GR_FNCALLBACKEVENT fncb)
 void
 GrDelay(GR_TIMEOUT msecs)
 {
-#if HELLOOS
-	msecs=msecs/10;
-	if(msecs==0)
-		msecs=1;
-	syscall_wait(msecs);
-#else
+#if !HELLOOS
 	struct timeval timeval;
 
 	timeval.tv_sec = msecs / 1000;
 	timeval.tv_usec = (msecs % 1000) * 1000;
 	select(0, NULL, NULL, NULL, &timeval);
-#endif
+#else
+	msecs=msecs/10;
+	if(msecs==0)
+		msecs=1;
+	syscall_wait(msecs);
+#endif /*!HELLOOS*/
 }
 
 /**
@@ -681,7 +682,8 @@ GrRegisterInput(int fd)
 
 	LOCK(&nxGlobalLock);
 	FD_SET(fd, &regfdset);
-	if (fd >= regfdmax) regfdmax = fd + 1;
+	if (fd >= regfdmax)
+		regfdmax = fd + 1;
 	UNLOCK(&nxGlobalLock);
 }
 
@@ -786,9 +788,12 @@ void
 GrServiceSelect(void *rfdset, GR_FNCALLBACKEVENT fncb)
 {
 	fd_set *	rfds = rfdset;
-	//int		fd;
 	GR_EVENT 	ev;
+#if !HELLOOS
+	int		fd;
+#else
 	struct	msg_head *msg;
+#endif
 
 	ACCESS_PER_THREAD_DATA()
 	LOCK(&nxGlobalLock);
@@ -854,15 +859,13 @@ GrMainLoop(GR_FNCALLBACKEVENT fncb)
 
 	for(;;) {
 		FD_ZERO(&rfds);
-#if HELLOOS
 		GrPrepareSelect(&setsize, &rfds);
-		if(bucket_select(setsize+1, &rfds, 0) > 0)
-			GrServiceSelect(&rfds, fncb);
-#else
-		GrPrepareSelect(&setsize, &rfds);
+#if !HELLOOS
 		if(select(setsize+1, &rfds, NULL, NULL, NULL) > 0)
-			GrServiceSelect(&rfds, fncb);
+#else
+		if(bucket_select(setsize+1, &rfds, 0) > 0)
 #endif
+			GrServiceSelect(&rfds, fncb);
 	}
 }
 
@@ -987,13 +990,15 @@ static void
 _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 {
 	fd_set		rfds;
-#if !HELLOOS
-	struct timeval	to;
-#endif
 	int		setsize = 0;
 	int		e;
-	ACCESS_PER_THREAD_DATA()
+#if !HELLOOS
+	struct timeval	to;
+#else
 	struct msg_head	*msg;
+#endif
+	ACCESS_PER_THREAD_DATA()
+
 
 	FD_ZERO(&rfds);
 	/*
@@ -1012,14 +1017,18 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 		to.tv_usec = (timeout % 1000) * 1000;
 	}
 #endif
-
-#if HELLOOS
-	if((e = bucket_select(setsize+1, &rfds, timeout))>0)
+	UNLOCK(&nxGlobalLock);	/* give other threads a chance to run*/
+#if !HELLOOS
+	e = select(setsize+1, &rfds, NULL, NULL, timeout ? &to : NULL);
 #else
-	if((e = select(setsize+1, &rfds, NULL, NULL, timeout ? &to : NULL))>0)
+	e = bucket_select(setsize+1, &rfds, timeout);
 #endif
-	{
-		//int fd;
+	LOCK(&nxGlobalLock);
+
+	if( e > 0) {
+#if !HELLOOS
+		int fd;
+#endif
 
 		if(FD_ISSET(nxSocket, &rfds)) {
 			/*
@@ -1032,12 +1041,8 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 			return;
 		}
 
-#if HELLOOS
-		msg=bucket_selected_msg();
-		ep->type = GR_EVENT_TYPE_FDINPUT;
-		ep->fdinput.fd = msg->service;
-#else
 		/* check for input on registered file descriptors */
+#if !HELLOOS
 		for (fd = 0; fd < regfdmax; fd++) {
 			if (FD_ISSET(fd, &regfdset) && FD_ISSET(fd, &rfds)) {
 				ep->type = GR_EVENT_TYPE_FDINPUT;
@@ -1045,20 +1050,19 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 				break;
 			}
 		}
+#else
+		msg=bucket_selected_msg();
+		ep->type = GR_EVENT_TYPE_FDINPUT;
+		ep->fdinput.fd = msg->service;
 #endif
-	}
-	else if (e == 0) {
+	} else if (e == 0) {
 		/*
 		 * Timeout has occured. We currently return a timeout event
 		 * regardless of whether the client has selected for it.
 		 */
 		ep->type = GR_EVENT_TYPE_TIMEOUT;
 	} else {
-#if HELLOOS
-		EPRINTF("nxclient: select failed\n");
-		GrClose();
-		exit(1);
-#else
+#if !HELLOOS
 		if(errno == EINTR) {
 			ep->type = GR_EVENT_TYPE_NONE;
 		} else {
@@ -1066,6 +1070,10 @@ _GrGetNextEventTimeout(GR_EVENT *ep, GR_TIMEOUT timeout)
 			GrClose();
 			exit(1);
 		}
+#else
+		EPRINTF("nxclient: select failed\n");
+		GrClose();
+		exit(1);
 #endif
 	}
 }
@@ -1936,7 +1944,7 @@ GR_REGION_ID
 GrNewPolygonRegion(int mode, GR_COUNT count, GR_POINT *points)
 {
 	nxNewPolygonRegionReq	*req;
-	long			size;
+	int32_t			size;
 	GR_REGION_ID		region;
 
 	if(count == 0)
@@ -1946,7 +1954,7 @@ GrNewPolygonRegion(int mode, GR_COUNT count, GR_POINT *points)
 		return 0;
 
 	LOCK(&nxGlobalLock);
-	size = (long)count * sizeof(GR_POINT);
+	size = (int32_t)count * sizeof(GR_POINT);
 	req = AllocReqExtra(NewPolygonRegion, size);
 	req->mode = mode;
 	/* FIXME: unportable method, depends on sizeof(int) in GR_POINT*/
@@ -2544,6 +2552,13 @@ GrSetGCUseBackground(GR_GC_ID gc, GR_BOOL flag)
 	UNLOCK(&nxGlobalLock);
 }
 
+/* DEPRECATED - use GrCreateFontEx*/
+GR_FONT_ID
+GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
+{
+	return GrCreateFontEx(name, height, height, plogfont);
+}
+
 /**
  * Attempts to locate a font with the desired attributes and returns a font
  * ID number which can be used to refer to it. If the plogfont argument is
@@ -2555,13 +2570,14 @@ GrSetGCUseBackground(GR_GC_ID gc, GR_BOOL flag)
  *
  * @param name  string containing the name of a built in font to look for
  * @param height  the desired height of the font
+ * @param width  the desired width of the font
  * @param plogfont  pointer to a LOGFONT structure
  * @return a font ID number which can be used to refer to the font
  *
  * @ingroup nanox_font
  */
 GR_FONT_ID
-GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
+GrCreateFontEx(GR_CHAR *name, GR_COORD height, GR_COORD width, GR_LOGFONT *plogfont)
 {
 	GR_FONT_ID	fontid;
 
@@ -2578,16 +2594,17 @@ GrCreateFont(GR_CHAR *name, GR_COORD height, GR_LOGFONT *plogfont)
 	}
 	else
 	{
-		nxCreateFontReq *req;
+		nxCreateFontExReq *req;
 
 		if (!name)
 			name = (GR_CHAR *)"";
 
-		req = AllocReqExtra(CreateFont, strlen((char *)name) + 1);
+		req = AllocReqExtra(CreateFontEx, strlen((char*)name) + 1);
 		req->height = height;
+		req->width = width;
 		strcpy((char *)GetReqData(req), name);
 
-		if (TypedReadBlock(&fontid, sizeof(fontid), GrNumCreateFont) == -1)
+		if (TypedReadBlock(&fontid, sizeof(fontid), GrNumCreateFontEx) == -1)
 			fontid = 0;
 	}
 
@@ -2675,6 +2692,13 @@ GrFreeFontList(GR_FONTLIST ***fonts, int numfonts)
 	UNLOCK(&nxGlobalLock);
 }
 
+/* DEPRECATED - use GrSetFontSizeEx*/
+void
+GrSetFontSize(GR_FONT_ID fontid, GR_COORD height)
+{
+	GrSetFontSizeEx(fontid, height, height);
+}
+
 /**
  * Changes the size of the specified font to the specified size.
  *
@@ -2684,14 +2708,15 @@ GrFreeFontList(GR_FONTLIST ***fonts, int numfonts)
  * @ingroup nanox_font
  */
 void
-GrSetFontSize(GR_FONT_ID fontid, GR_COORD size)
+GrSetFontSizeEx(GR_FONT_ID fontid, GR_COORD height, GR_COORD width)
 {
-	nxSetFontSizeReq *req;
+	nxSetFontSizeExReq *req;
 
 	LOCK(&nxGlobalLock);
-	req = AllocReq(SetFontSize);
+	req = AllocReq(SetFontSizeEx);
 	req->fontid = fontid;
-	req->fontsize = size;
+	req->height = height;
+	req->width = width;
 	UNLOCK(&nxGlobalLock);
 }
 
@@ -3033,18 +3058,36 @@ GrBitmap(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 	GR_SIZE height, GR_BITMAP *imagebits)
 {
 	nxBitmapReq *req;
-	long 	     bitmapsize;
+	GR_SIZE	chunk_y    = height;
+	int32_t	bitmapsize = (int32_t)GR_BITMAP_SIZE(width, height) * sizeof(GR_BITMAP);
 
-	bitmapsize = (long)GR_BITMAP_SIZE(width, height) * sizeof(GR_BITMAP);
+	if (bitmapsize > MAXREQUESTSZ) {
+		chunk_y = (GR_SIZE)(((int32_t)height * MAXREQUESTSZ) / bitmapsize);
+		/* needs to be one line less than max */
+		if (chunk_y)
+			chunk_y--;
+		bitmapsize = (int32_t)GR_BITMAP_SIZE(width, chunk_y) * sizeof(GR_BITMAP);
+		}
+
 	LOCK(&nxGlobalLock);
-	req = AllocReqExtra(Bitmap, bitmapsize);
-	req->drawid = id;
-	req->gcid = gc;
-	req->x = x;
-	req->y = y;
-	req->width = width;
-	req->height = height;
-	memcpy(GetReqData(req), imagebits, bitmapsize);
+	/* Break request into MAXREQUESTSZ size packets */
+	while(height > 0) {
+		if(chunk_y > height) {
+			chunk_y = height;
+			bitmapsize = (int32_t)GR_BITMAP_SIZE(width, chunk_y) * sizeof(GR_BITMAP);
+		}
+		req = AllocReqExtra(Bitmap, bitmapsize);
+		req->drawid = id;
+		req->gcid = gc;
+		req->x = x;
+		req->y = y;
+		req->width = width;
+		req->height = chunk_y;
+		memcpy(GetReqData(req), imagebits, bitmapsize);
+		imagebits += bitmapsize / sizeof(GR_BITMAP);
+		y += chunk_y;
+		height -= chunk_y;
+	}
 	UNLOCK(&nxGlobalLock);
 }
 
@@ -3065,33 +3108,52 @@ void
 GrDrawImageBits(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 	GR_IMAGE_HDR *pimage)
 {
-	nxDrawImageBitsReq	*req;
-	int			imagesize;
-	int			palsize;
-	char			*addr;
+	nxDrawImageBitsReq    *req;
+	int		      imagesize, blocksize;
+	int		      palsize, rest, step;
+	char                  *addr;
+	char		      *bits;
 
 	imagesize = pimage->pitch * pimage->height;
 	palsize = pimage->palsize * sizeof(MWPALENTRY);
-	LOCK(&nxGlobalLock);
-	req = AllocReqExtra(DrawImageBits, imagesize + palsize);
-	req->drawid = id;
-	req->gcid = gc;
-	req->x = x;
-	req->y = y;
-	/* fill MWIMAGEHDR items passed externally*/
-	req->width = pimage->width;
-	req->height = pimage->height;
-	req->planes = pimage->planes;
-	req->bpp = pimage->bpp;
-	req->pitch = pimage->pitch;
-	req->bytesperpixel = pimage->bytesperpixel;
-	req->compression = pimage->compression;
-	req->palsize = pimage->palsize;
-	req->transcolor = pimage->transcolor;
-	addr = GetReqData(req);
-	memcpy(addr, pimage->imagebits, imagesize);
-	memcpy(addr+imagesize, pimage->palette, palsize);
-	UNLOCK(&nxGlobalLock);
+	bits = (char*)(pimage->imagebits);
+	rest = pimage->height;
+
+	/* so many lines can be transfered in one step */
+	step = (MAXREQUESTSZ - palsize -
+		sizeof(nxDrawImageBitsReq)) / pimage->pitch;
+	assert(step > 0);
+
+	while (rest > 0) {
+		if (rest < step)
+		    step = rest;
+		blocksize = pimage->pitch * step;
+
+		LOCK(&nxGlobalLock);
+		req = AllocReqExtra(DrawImageBits, blocksize + palsize);
+		req->drawid = id;
+		req->gcid = gc;
+		req->x = x;
+		req->y = y;
+		/* fill MWIMAGEHDR items passed externally*/
+		req->width = pimage->width;
+		req->height = step;
+		req->planes = pimage->planes;
+		req->bpp = pimage->bpp;
+		req->pitch = pimage->pitch;
+		req->bytesperpixel = pimage->bytesperpixel;
+		req->compression = pimage->compression;
+		req->palsize = pimage->palsize;
+		req->transcolor = pimage->transcolor;
+		addr = GetReqData(req);
+		memcpy(addr, bits, blocksize);
+		memcpy(addr+imagesize, pimage->palette, palsize);
+		UNLOCK(&nxGlobalLock);
+
+		y += step;
+		rest -= step;
+		bits += blocksize;
+	}
 }
 
 #if MW_FEATURE_IMAGES && defined(HAVE_FILEIO)
@@ -3207,6 +3269,50 @@ GrDrawImageToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 	req->imageid = imageid;
 	UNLOCK(&nxGlobalLock);
 }
+
+/**
+ * Draws specified part of the image from the specified image buffer at the specified position
+ * on the specified drawable using the specified graphics context. The
+ * width and height values specify the size of the image to draw- if the
+ * actual image is a different size, it will be scaled to fit.
+ *
+ * @param id  the ID of the drawable to draw the image onto
+ * @param gc  the ID of the graphics context to use when drawing the image
+ * @param x  the X coordinate to draw the image at relative to the drawable
+ * @param y  the Y coordinate to draw the image at relative to the drawable
+ * @param width  the maximum image width
+ * @param height  the maximum image height
+ * @param sx  the X coordinate at the source pixmap to draw from
+ * @param sy  the Y coordinate at the source pixmap to draw from
+ * @param swidth  the maximum source image width
+ * @param sheight  the maximum source image height
+ * @param imageid  the ID of the image buffer containing the image to display
+ *
+ * @ingroup nanox_image
+ */ 
+void
+GrDrawImagePartToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD dx, GR_COORD dy,
+	GR_SIZE dwidth, GR_SIZE dheight, GR_COORD sx, GR_COORD sy,
+	GR_SIZE swidth, GR_SIZE sheight, GR_IMAGE_ID imageid)
+{
+	nxDrawImagePartToFitReq *req;
+	LOCK(&nxGlobalLock);
+	req = AllocReq(DrawImagePartToFit);
+	req->drawid = id;
+	req->gcid = gc;
+	req->dx = dx;
+	req->dy = dy;
+	req->dwidth = dwidth;
+	req->dheight = dheight;
+	req->sx = sx;
+	req->sy = sy;
+	req->swidth = swidth;
+	req->sheight = sheight;
+	req->imageid = imageid;
+	UNLOCK(&nxGlobalLock);
+
+}
+
 #endif /* MW_FEATURE_IMAGES */
 
 #if MW_FEATURE_IMAGES
@@ -3387,9 +3493,7 @@ GrDrawImageFromBuffer(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 #endif /* MW_FEATURE_IMAGES */
 
 
-/*
- * FIXME ... what does this comment relate to?
- *
+/**
  * Draw a rectangular area in the specified drawable using the specified
  * graphics context.  This differs from rectangle drawing in that the
  * color values for each pixel in the rectangle are specified.
@@ -3400,20 +3504,23 @@ GrDrawImageFromBuffer(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
  * The pixels are packed according to pixtype:
  *
  * pixtype		array of
- * MWPF_RGB		MWCOLORVAL (unsigned long)
+ * MWPF_RGB		MWCOLORVAL (uint32_t)
  * MWPF_PIXELVAL	MWPIXELVAL (compile-time dependent)
  * MWPF_PALETTE		unsigned char
- * MWPF_TRUECOLOR0888	unsigned long
+ * MWPF_TRUECOLOR0888	uint32_t
+ * MWPF_TRUECOLOR8888	uint32_t
+ * MWPF_TRUECOLORABGR	uint32_t
  * MWPF_TRUECOLOR888	packed struct {char r,char g,char b} (24 bits)
  * MWPF_TRUECOLOR565	unsigned short
  * MWPF_TRUECOLOR555	unsigned short
  * MWPF_TRUECOLOR332	unsigned char
- */
-/**
+ * MWPF_TRUECOLOR233	unsigned char
+ * MWPF_HWPIXELVAL	one of the above values (run-time dependent)
+ *
  * Draws the specified pixel array of the specified size and format onto the
  * specified drawable using the specified graphics context at the specified
  * position. Note that colour conversion is currently only performed when using
- * the GR_PF_RGB format, which is an unsigned long containing RGBX data.
+ * the GR_PF_RGB format, which is an uint32_t containing RGBX data.
  *
  * @param id  the ID of the drawable to draw the area onto
  * @param gc  the ID of the graphics context to use when drawing the area
@@ -3431,12 +3538,27 @@ GrArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 	GR_SIZE height, void *pixels, int pixtype)
 {
 	nxAreaReq *req;
-	long       size;
-	long       chunk_y;
+	int32_t       size;
+	int32_t       chunk_y;
 	int        pixsize;
+	int	   type;
+	static int hwpixtype = 0;
+
+	/* find pixel type for hw format pixel if required*/
+	if (pixtype == MWPF_HWPIXELVAL) {
+		/* kluge handle getting hw pixel size once*/
+		if (hwpixtype == 0) {
+			GR_SCREEN_INFO si;
+
+			GrGetScreenInfo(&si);
+			hwpixtype = si.pixtype;
+		}
+		type = hwpixtype;
+	} else
+		type = pixtype;
 
 	/* Calculate size of packed pixels*/
-	switch(pixtype) {
+	switch(type) {
 	case MWPF_RGB:
 		pixsize = sizeof(MWCOLORVAL);
 		break;
@@ -3444,11 +3566,14 @@ GrArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 		pixsize = sizeof(MWPIXELVAL);
 		break;
 	case MWPF_PALETTE:
+	case MWPF_TRUECOLOR233:
 	case MWPF_TRUECOLOR332:
 		pixsize = sizeof(unsigned char);
 		break;
 	case MWPF_TRUECOLOR0888:
-		pixsize = sizeof(unsigned long);
+	case MWPF_TRUECOLOR8888:
+	case MWPF_TRUECOLORABGR:
+		pixsize = sizeof(uint32_t);
 		break;
 	case MWPF_TRUECOLOR888:
 		pixsize = 3;
@@ -3465,10 +3590,10 @@ GrArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 	/* Break request into MAXREQUESTSZ size packets*/
 	while(height > 0) {
 		chunk_y = (MAXREQUESTSZ - sizeof(nxAreaReq)) /
-			((long)width * pixsize);
+			((int32_t)width * pixsize);
 		if(chunk_y > height)
 			chunk_y = height;
-		size = chunk_y * ((long)width * pixsize);
+		size = chunk_y * ((int32_t)width * pixsize);
 		req = AllocReqExtra(Area, size);
 		req->drawid = id;
 		req->gcid = gc;
@@ -3506,7 +3631,7 @@ GrArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 void
 GrCopyArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 	GR_SIZE width, GR_SIZE height, GR_DRAW_ID srcid,
-	GR_COORD srcx, GR_COORD srcy, unsigned long op)
+	GR_COORD srcx, GR_COORD srcy, int op)
 {
 	nxCopyAreaReq *req;
 
@@ -3547,7 +3672,7 @@ GrReadArea(GR_DRAW_ID id,GR_COORD x,GR_COORD y,GR_SIZE width,
 	GR_SIZE height, GR_PIXELVAL *pixels)
 {
 	nxReadAreaReq *req;
-	long           size;
+	int32_t           size;
 
 	LOCK(&nxGlobalLock);
 	req = AllocReq(ReadArea);
@@ -3556,7 +3681,7 @@ GrReadArea(GR_DRAW_ID id,GR_COORD x,GR_COORD y,GR_SIZE width,
 	req->y = y;
 	req->width = width;
 	req->height = height;
-	size = (long)width * height * sizeof(MWPIXELVAL);
+	size = (int32_t)width * height * sizeof(MWPIXELVAL);
 	TypedReadBlock(pixels, size, GrNumReadArea);
 	UNLOCK(&nxGlobalLock);
 }
@@ -3601,9 +3726,9 @@ void
 GrPoints(GR_DRAW_ID id, GR_GC_ID gc, GR_COUNT count, GR_POINT *pointtable)
 {
 	nxPointsReq *req;
-	long	size;
+	int32_t	size;
 
-	size = (long)count * sizeof(GR_POINT);
+	size = (int32_t)count * sizeof(GR_POINT);
 	LOCK(&nxGlobalLock);
 	req = AllocReqExtra(Points, size);
 	req->drawid = id;
@@ -3629,10 +3754,10 @@ void
 GrPoly(GR_DRAW_ID id, GR_GC_ID gc, GR_COUNT count, GR_POINT *pointtable)
 {
 	nxPolyReq *req;
-	long       size;
+	int32_t       size;
 
 	LOCK(&nxGlobalLock);
-	size = (long)count * sizeof(GR_POINT);
+	size = (int32_t)count * sizeof(GR_POINT);
 	req = AllocReqExtra(Poly, size);
 	req->drawid = id;
 	req->gcid = gc;
@@ -3657,10 +3782,10 @@ void
 GrFillPoly(GR_DRAW_ID id, GR_GC_ID gc, GR_COUNT count,GR_POINT *pointtable)
 {
 	nxFillPolyReq *req;
-	long           size;
+	int32_t           size;
 
 	LOCK(&nxGlobalLock);
-	size = (long)count * sizeof(GR_POINT);
+	size = (int32_t)count * sizeof(GR_POINT);
 	req = AllocReqExtra(FillPoly, size);
 	req->drawid = id;
 	req->gcid = gc;
@@ -4553,7 +4678,7 @@ GrStretchArea(GR_DRAW_ID dstid, GR_GC_ID gc,
 	      GR_DRAW_ID srcid,
 	      GR_COORD sx1, GR_COORD sy1,
 	      GR_COORD sx2, GR_COORD sy2,
-	      unsigned long op)
+	      int op)
 {
 	nxStretchAreaReq *req;
 
@@ -4717,7 +4842,7 @@ GrSetTransform(GR_TRANSFORM *trans)
  */
 GR_FONT_ID
 GrCreateFontFromBuffer(const void *buffer, unsigned length,
-		       const char *format, GR_COORD height)
+	const char *format, GR_COORD height, GR_COORD width)
 {
 	GR_FONT_ID result;
 	nxCreateFontFromBufferReq *req;
@@ -4735,6 +4860,7 @@ GrCreateFontFromBuffer(const void *buffer, unsigned length,
 
 	req = AllocReq(CreateFontFromBuffer);
 	req->height = height;
+	req->width = width;
 	req->buffer_id = bufid;
 
 	if (format == NULL)
@@ -4763,7 +4889,7 @@ GrCreateFontFromBuffer(const void *buffer, unsigned length,
  * @ingroup nanox_font
  */
 GR_FONT_ID
-GrCopyFont(GR_FONT_ID fontid, GR_COORD height)
+GrCopyFont(GR_FONT_ID fontid, GR_COORD height, GR_COORD width)
 {
 	GR_FONT_ID result;
 	nxCopyFontReq *req;
@@ -4772,6 +4898,7 @@ GrCopyFont(GR_FONT_ID fontid, GR_COORD height)
 	req = AllocReq(CopyFont);
 	req->fontid = fontid;
 	req->height = height;
+	req->width = width;
 
 	if (TypedReadBlock(&result, sizeof(result), GrNumCopyFont) == -1)
 		result = 0;

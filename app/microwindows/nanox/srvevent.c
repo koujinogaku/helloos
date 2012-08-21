@@ -1,8 +1,6 @@
 /*
  * Copyright (c) 2000, 2003 Greg Haerr <greg@censoft.com>
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Graphics server event routines for windows.
  */
@@ -10,10 +8,16 @@
 #include "memory.h"
 #include "string.h"
 #include "print.h"
+
 #include "serv.h"
 
+#if HAVE_VNCSERVER && VNCSERVER_PTHREADED
+#include "lock.h"
+LOCK_DECLARE(eventMutex);
+#endif
+
 /* readable error strings*/
-char *nxErrorStrings[] = {
+const char *nxErrorStrings[] = {
 	GR_ERROR_STRINGS
 };
 
@@ -81,7 +85,6 @@ void GsError(GR_ERROR code, GR_ID id)
 	EPRINTF("nano-X: GsError ");
 	if(curfunc)
 		EPRINTF("(%s) ", curfunc);
-	//display_puts(nxErrorStrings[code]);
 	EPRINTF(nxErrorStrings[code], id);
 
 	/* if no clients, nothing to report*/
@@ -122,6 +125,9 @@ GR_EVENT *GsAllocEvent(GR_CLIENT *client)
 	 * Get a new event structure from the free list, or else
 	 * allocate it using malloc.
 	 */
+#if HAVE_VNCSERVER && VNCSERVER_PTHREADED
+        UNLOCK(&eventMutex);
+#endif
 	elp = eventfree;
 	if (elp)
 		eventfree = elp->next;
@@ -132,6 +138,9 @@ GR_EVENT *GsAllocEvent(GR_CLIENT *client)
 			curclient = client;
 			GsError(GR_ERROR_MALLOC_FAILED, 0);
 			curclient = oldcurclient;
+#if HAVE_VNCSERVER && VNCSERVER_PTHREADED
+                        UNLOCK(&eventMutex);
+#endif
 			return NULL;
 		}
 	}
@@ -151,6 +160,9 @@ GR_EVENT *GsAllocEvent(GR_CLIENT *client)
 	elp->next = NULL;
 	elp->event.type = GR_EVENT_TYPE_NONE;
 
+#if HAVE_VNCSERVER && VNCSERVER_PTHREADED
+        UNLOCK(&eventMutex);
+#endif
 	return &elp->event;
 }
 
@@ -253,18 +265,21 @@ void GsHandleMouseStatus(GR_COORD newx, GR_COORD newy, int newbuttons)
 	if ((newx != cursorx) || (newy != cursory)) {
 		GsResetScreenSaver();
 		GrMoveCursor(newx, newy);
+
 		GsDeliverMotionEvent(GR_EVENT_TYPE_MOUSE_MOTION,
 			newbuttons, modifiers);
 		GsDeliverMotionEvent(GR_EVENT_TYPE_MOUSE_POSITION,
 			newbuttons, modifiers);
 	}
+
 	/*
 	 * Next, generate a button up event if any buttons have been released.
 	 */
 	changebuttons = (curbuttons & ~newbuttons);
 	if (changebuttons) {
-		GsResetScreenSaver();
-		GsDeliverButtonEvent(GR_EVENT_TYPE_BUTTON_UP,
+
+	  GsResetScreenSaver();
+	  GsDeliverButtonEvent(GR_EVENT_TYPE_BUTTON_UP,
 			       newbuttons, changebuttons, modifiers);
 	}
 
@@ -274,6 +289,10 @@ void GsHandleMouseStatus(GR_COORD newx, GR_COORD newy, int newbuttons)
 	 */
 	changebuttons = (~curbuttons & newbuttons);
 	if (changebuttons) {
+/*** removed - double mouse button exits server
+		if ((newbuttons&(GR_BUTTON_L|GR_BUTTON_R)) == (GR_BUTTON_L|GR_BUTTON_R))
+			GsTerminate();
+***/
 		GsResetScreenSaver();
 		GsDeliverButtonEvent(GR_EVENT_TYPE_BUTTON_DOWN,
 			newbuttons, changebuttons, modifiers);
@@ -330,6 +349,7 @@ void GsDeliverButtonEvent(GR_EVENT_TYPE type, int buttons, int changebuttons,
 #endif
 		wp = grabbuttonwp;
 	}
+
 	for (;;) {
 		for (ecp = wp->eventclients; ecp; ecp = ecp->next) {
 			if ((ecp->eventmask & eventmask) == 0)
@@ -759,7 +779,7 @@ update_again:
 /*
  * Try to deliver a general event such as focus in, focus out, mouse enter,
  * or mouse exit to the clients which have selected for it.  These events
- * only have the window id as data, and do not propagate upwards.
+ * do not propagate upwards.
  */
 void
 GsDeliverGeneralEvent(GR_WINDOW *wp, GR_EVENT_TYPE type, GR_WINDOW *other)
@@ -773,7 +793,6 @@ GsDeliverGeneralEvent(GR_WINDOW *wp, GR_EVENT_TYPE type, GR_WINDOW *other)
 		return;
 
 	for (ecp = wp->eventclients; ecp; ecp = ecp->next) {
-		assert(memory_chkheapaddr(ecp));
 		if ((ecp->eventmask & eventmask) == 0)
 			continue;
 
@@ -786,6 +805,14 @@ GsDeliverGeneralEvent(GR_WINDOW *wp, GR_EVENT_TYPE type, GR_WINDOW *other)
 		if (other)
 			gp->otherid = other->id;
 		else gp->otherid = 0;
+
+		/* add root window x, y mouse coordinates*/
+		gp->rootx = cursorx;
+		gp->rooty = cursory;
+
+		/* window x,y only valid for mouse enter*/
+		gp->x = cursorx - wp->x;
+		gp->y = cursory - wp->y;
 	}
 }
 
@@ -924,6 +951,9 @@ GsFreePositionEvent(GR_CLIENT *client, GR_WINDOW_ID wid, GR_WINDOW_ID subwid)
 	GR_EVENT_LIST	*elp;		/* current element list */
 	GR_EVENT_LIST	*prevelp;	/* previous element list */
 
+#if HAVE_VNCSERVER && VNCSERVER_PTHREADED
+        LOCK(&eventMutex);
+#endif
 	prevelp = NULL;
 	for (elp = client->eventhead; elp; prevelp = elp, elp = elp->next) {
 		if (elp->event.type != GR_EVENT_TYPE_MOUSE_POSITION)
@@ -945,8 +975,11 @@ GsFreePositionEvent(GR_CLIENT *client, GR_WINDOW_ID wid, GR_WINDOW_ID subwid)
 
 		elp->next = eventfree;
 		eventfree = elp;
-		return;
+		break;
 	}
+#if HAVE_VNCSERVER && VNCSERVER_PTHREADED
+        UNLOCK(&eventMutex);
+#endif
 }
 
 /*
@@ -1033,7 +1066,7 @@ GsDeliverRawMouseEvent(int rx, int ry, int buttons, int modifiers)
 	/* Deliver button events if we have to */
 	for (i = 0; i < 2; i++) {
 		GR_EVENT_BUTTON *gp;
-		unsigned long cbuttons = 0;
+		uint32_t cbuttons = 0;
 		GR_EVENT_TYPE etype = (i == 0) ? GR_EVENT_TYPE_BUTTON_DOWN :
 			GR_EVENT_TYPE_BUTTON_UP;
 

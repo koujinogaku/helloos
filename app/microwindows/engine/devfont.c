@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2002, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000, 2002, 2003, 2005 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  */
 /**
@@ -12,15 +12,23 @@
  *
  * Device-independent font and text drawing routines
  */
-/*#define NDEBUG*/
+#include "portunixstd.h"
 #include "string.h"
 #include "stdlib.h"
+#include "memory.h"
 
 #include "device.h"
 #include "devfont.h"
-#include "../drivers/genfont.h"
+#include "genfont.h"
+//#include "intl.h"
 
 #define FONTNAME_MAX_LEN (255)
+
+#if (UNIX | DOS_DJGPP)
+#define strcmpi	strcasecmp
+#endif
+
+//#define DEBUG_TEXT_SHAPING
 
 /**
  * The current font.
@@ -31,11 +39,14 @@ static PMWFONT	gr_pfont=0;
 extern MWPIXELVAL gr_foreground;
 extern MWPIXELVAL gr_background;
 extern MWBOOL gr_usebg;
+extern MWCOREFONT *user_builtin_fonts;
 
 void corefont_drawtext(PMWFONT pfont, PSD psd, MWCOORD x, MWCOORD y,
 		const void *text, int cc, MWTEXTFLAGS flags);
-static int  utf8_to_utf16(const unsigned char *utf8, int cc,
+static int utf8_to_utf16(const unsigned char *utf8, int cc,
 		unsigned short *unicode16);
+static int uc16_to_utf8(const unsigned short *us, int cc, unsigned char *s);
+
 
 /**
  * Set the font for future calls.
@@ -73,12 +84,13 @@ GdSetFont(PMWFONT pfont)
  *                 plogfont is specified.
  * @param height   The height of the font in pixels.  Ignored if
  *                 plogfont is specified.
+ * @param width    The width of the font in pixels.  Ignored if
+ *                 plogfont is specified.
  * @param plogfont A structure describing the font, or NULL.
  * @return         A new font, or NULL on error.
  */
 PMWFONT
-GdCreateFont(PSD psd, const char *name, MWCOORD height,
-	const PMWLOGFONT plogfont)
+GdCreateFont(PSD psd, const char *name, MWCOORD height, MWCOORD width, const PMWLOGFONT plogfont)
 {
 	int 		i;
 	int		fontht;
@@ -87,6 +99,7 @@ GdCreateFont(PSD psd, const char *name, MWCOORD height,
 	int		fontattr = 0;
 	PMWFONT		pfont;
 	PMWCOREFONT	pf = psd->builtin_fonts;
+	PMWCOREFONT	upf;
 	MWFONTINFO	fontinfo;
 	MWSCREENINFO 	scrinfo;
 	const char *	fontname;
@@ -121,6 +134,7 @@ GdCreateFont(PSD psd, const char *name, MWCOORD height,
 		fontclass = plogfont->lfClass;
 #endif
 		height = plogfont->lfHeight;
+		width = plogfont->lfWidth;
 		if (plogfont->lfUnderline)
 			fontattr = MWTF_UNDERLINE;
 	}
@@ -132,7 +146,7 @@ GdCreateFont(PSD psd, const char *name, MWCOORD height,
  			if(!strncmpi(pf[i].name, fontname, FONTNAME_MAX_LEN)) {
   				pf[i].fontsize = pf[i].cfont->height;
 				pf[i].fontattr = fontattr;
-DPRINTF("createfont: (height == 0) found builtin font %s (%d)\n", fontname, i);
+				DPRINTF("createfont: (height == 0) found builtin font %s (%d)\n", fontname, i);
   				return (PMWFONT)&pf[i];
   			}
   		}
@@ -146,113 +160,157 @@ DPRINTF("createfont: (height == 0) found builtin font %s (%d)\n", fontname, i);
 		 * height, and the closest builtin font to the specified
 		 * height will always be returned.
 		 */
+		if (fontclass != MWLF_CLASS_ANY)
+			EPRINTF("builtin-createfont: %s,%d not found\n",
+				fontname, height);
   	}
+
+	/* check user builtin fonts next*/
+	upf = user_builtin_fonts;
+	while ( (upf != NULL) && (upf->name != NULL) ) {
+		if(!strncmpi(upf->name, fontname, FONTNAME_MAX_LEN) && (upf->cfont->height == height) ) {
+			if( upf->fontprocs == NULL )
+				gen_setfontproc(upf);
+			upf->fontsize = upf->cfont->height;
+			upf->fontattr = fontattr;
+			DPRINTF("createfont: (height != 0) found user builtin font %s (%d)\n", fontname, height);
+			return (PMWFONT)upf;
+		}
+		upf++;
+	}
 
 	/* try to load font (regardless of height) using other renderers*/
 
-#ifdef HAVE_FNT_SUPPORT
+#if HAVE_FNT_SUPPORT
 	if (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_FNT) {
-		pfont = (PMWFONT) fnt_createfont(fontname, height, fontattr);
+		pfont = (PMWFONT)fnt_createfont(fontname, height, width, fontattr);
 		if (pfont) {
 			DPRINTF("fnt_createfont: using font %s\n", fontname);
-			return(pfont);
+			return pfont;
 		}
-		EPRINTF("fnt_createfont: %s,%d not found\n", fontname, height);
+		if (fontclass != MWLF_CLASS_ANY)
+			EPRINTF("fnt_createfont: %s,%d not found\n", fontname, height);
 	}
 #endif
 
-#ifdef HAVE_PCF_SUPPORT
+#if HAVE_PCF_SUPPORT
 	if (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_PCF) {
-		pfont = (PMWFONT) pcf_createfont(fontname, height, fontattr);
+		pfont = (PMWFONT)pcf_createfont(fontname, height, width, fontattr);
 		if (pfont) {
 			DPRINTF("pcf_createfont: using font %s\n", fontname);
-			return(pfont);
+			return pfont;
 		}
-		EPRINTF("pcf_createfont: %s,%d not found\n", fontname, height);
+		if (fontclass != MWLF_CLASS_ANY)
+			EPRINTF("pcf_createfont: %s,%d not found\n", fontname, height);
 	}
 #endif
 
 #if HAVE_FREETYPE_SUPPORT
  	if (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_FREETYPE) {
-		if (freetype_init(psd)) {
-			/* FIXME auto antialias for height > 14 for kaffe*/
-			if (plogfont && plogfont->lfHeight > 14 &&
-				plogfont->lfQuality)
+		//if (freetype_init(psd)) {
+			if (plogfont && abs(plogfont->lfHeight) > FFMINAA_HEIGHT && plogfont->lfQuality)
 					fontattr |= MWTF_ANTIALIAS;
 
-			pfont = (PMWFONT)freetype_createfont(fontname, height,
-					fontattr);
+			pfont = (PMWFONT)freetype_createfont(fontname, height, width, fontattr);
 			if(pfont) {
 				/* FIXME kaffe kluge*/
 				pfont->fontattr |= MWTF_FREETYPE;
 				return pfont;
 			}
- 			EPRINTF("freetype_createfont: %s,%d not found\n",
-				fontname, height);
-		}
+			if (fontclass != MWLF_CLASS_ANY)
+	 			EPRINTF("freetype_createfont: %s,%d not found\n", fontname, height);
+		//}
   	}
 #endif
 
 #if HAVE_FREETYPE_2_SUPPORT
  	if (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_FREETYPE) {
-		if (freetype2_init(psd)) {
+		//if (freetype_init(psd)) {
 			/* FIXME auto antialias for height > 14 for kaffe*/
-			if (plogfont && plogfont->lfHeight > 14 &&
-				plogfont->lfQuality)
+			if (plogfont && abs(plogfont->lfHeight) > 14 && plogfont->lfQuality)
 					fontattr |= MWTF_ANTIALIAS;
 
-			pfont = (PMWFONT)freetype2_createfont(fontname, height,
-					fontattr);
+			pfont = (PMWFONT)freetype2_createfont(fontname, height, width, fontattr);
 			if(pfont) {
+				DPRINTF("freetype_createfont: using font %s\n", fontname);
 				/* FIXME kaffe kluge*/
 				pfont->fontattr |= MWTF_FREETYPE;
 				return pfont;
 			}
-			EPRINTF("freetype2_createfont: %s,%d not found\n",
-				fontname, height);
-		}
+			if (fontclass != MWLF_CLASS_ANY)
+				EPRINTF("freetype2_createfont: %s,%d not found\n", fontname, height);
+		//}
   	}
 #endif
 
 #if HAVE_T1LIB_SUPPORT
 	if (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_T1LIB) {
-		if (t1lib_init(psd)) {
-			pfont = (PMWFONT)t1lib_createfont(fontname, height,
-					fontattr);
+		//if (t1lib_init(psd)) {
+			pfont = (PMWFONT)t1lib_createfont(fontname, height, width, fontattr);
 			if(pfont)
 				return pfont;
-			EPRINTF("t1lib_createfont: %s,%d not found\n",
-				fontname, height);
-		}
+			if (fontclass != MWLF_CLASS_ANY)
+				EPRINTF("t1lib_createfont: %s,%d not found\n", fontname, height);
+		//}
   	}
 #endif
 
 #if HAVE_HZK_SUPPORT
 	if (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_HZK) {
-		/* Make sure the library is initialized */
-		if (hzk_init(psd)) {
-			pfont = (PMWFONT)hzk_createfont(fontname, height, fontattr);
+		//if (hzk_init(psd)) {
+			pfont = (PMWFONT)hzk_createfont(fontname, height, width, fontattr);
 			if(pfont)		
 				return pfont;
-			EPRINTF("hzk_createfont: %s,%d not found\n", fontname, height);
-		}
+			if (fontclass != MWLF_CLASS_ANY)
+				EPRINTF("hzk_createfont: %s,%d not found\n",
+					fontname, height);
+		//}
 	}
 #endif
 
 #if HAVE_EUCJP_SUPPORT
  	if (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_MGL) {
-		pfont = (PMWFONT)eucjp_createfont(fontname, height, fontattr);
+		pfont = (PMWFONT)eucjp_createfont(fontname, height, width, fontattr);
 		if (pfont) {
 			DPRINTF("eujcp_createfont: using font %s\n", fontname);
 			return pfont;
 		}
-		EPRINTF("eucjp_createfont: %s,%d not found\n", fontname, height);
+		if (fontclass != MWLF_CLASS_ANY)
+			EPRINTF("eucjp_createfont: %s,%d not found\n", fontname, height);
 	}
 #endif
 
+	if (fontclass == MWLF_CLASS_ANY) {
+		EPRINTF("createfont: %s,%d not found\n", fontname, height);
+		EPRINTF("  (tried "
+			"builtin_createfont"
+#ifdef HAVE_FNT_SUPPORT
+			", fnt_createfont"
+#endif
+#ifdef HAVE_PCF_SUPPORT
+			", pcf_createfont"
+#endif
+#if HAVE_FREETYPE_SUPPORT
+			", freetype_createfont"
+#endif
+#if HAVE_FREETYPE_2_SUPPORT
+			", freetype2_createfont"
+#endif
+#if HAVE_T1LIB_SUPPORT
+			", t1lib_createfont"
+#endif
+#if HAVE_HZK_SUPPORT
+			", hzk_createfont"
+#endif
+#if HAVE_EUCJP_SUPPORT
+			", eujcp_createfont"
+#endif
+			")\n");
+	}
+
 	/*
-	 * No font yet found.  If height specified, we'll return
-	 * a builtin font.  Otherwise 0 will be returned.
+	 * No font yet found.  If the height was specified, we'll return the
+	 * most close builtin font as a fallback.  Otherwise 0 will be returned.
 	 */
  	if (height != 0 && (fontclass == MWLF_CLASS_ANY || fontclass == MWLF_CLASS_BUILTIN)) {
 		/* find builtin font closest in height*/
@@ -269,12 +327,12 @@ DPRINTF("createfont: (height == 0) found builtin font %s (%d)\n", fontname, i);
 		}
 		pf[fontno].fontsize = pf[fontno].cfont->height;
 		pf[fontno].fontattr = fontattr;
-DPRINTF("createfont: (height != 0) using builtin font %s (%d)\n", pf[fontno].name, fontno);
+		EPRINTF("createfont: height given, using builtin font %s (%d) as fallback\n", pf[fontno].name, fontno);
 		return (PMWFONT)&pf[fontno];
 	}
 
-	/* no font matched: don't load font, return 0*/
-DPRINTF("createfont: no font found, returning NULL\n");
+	/* no font found: don't load any font and return 0*/
+	EPRINTF("createfont: no height given, fallback search impossible, returning NULL\n");
 	return 0;
 }
 
@@ -286,15 +344,12 @@ DPRINTF("createfont: no font found, returning NULL\n");
  * @return         The old size.
  */
 MWCOORD
-GdSetFontSize(PMWFONT pfont, MWCOORD fontsize)
+GdSetFontSize(PMWFONT pfont, MWCOORD height, MWCOORD width)
 {
-	MWCOORD oldfontsize = pfont->fontsize;
-	pfont->fontsize = fontsize;
-
 	if (pfont->fontprocs->SetFontSize)
-	    pfont->fontprocs->SetFontSize(pfont, fontsize);
+	    return pfont->fontprocs->SetFontSize(pfont, height, width);
 
-	return oldfontsize;
+	return 0;
 }
 
 /**
@@ -328,15 +383,10 @@ GdSetFontRotation(PMWFONT pfont, int tenthdegrees)
 int
 GdSetFontAttr(PMWFONT pfont, int setflags, int clrflags)
 {
-	MWCOORD	oldattr = pfont->fontattr;
-
-	pfont->fontattr &= ~clrflags;
-	pfont->fontattr |= setflags;
-
 	if (pfont->fontprocs->SetFontAttr)
-	    pfont->fontprocs->SetFontAttr(pfont, setflags, clrflags);
+	    return pfont->fontprocs->SetFontAttr(pfont, setflags, clrflags);
 	
-	return oldattr;
+	return 0;
 }
 
 /**
@@ -395,7 +445,7 @@ GdText(PSD psd, MWCOORD x, MWCOORD y, const void *str, int cc,MWTEXTFLAGS flags)
 	const void *	text;
 	int		defencoding = gr_pfont->fontprocs->encoding;
 	int		force_uc16 = 0;
-	unsigned long	buf[256];
+	uint32_t *buf = NULL;
 
 	/*
 	 * DBCS encoding is handled a little special: if the selected
@@ -417,25 +467,38 @@ GdText(PSD psd, MWCOORD x, MWCOORD y, const void *str, int cc,MWTEXTFLAGS flags)
 		}
 	}
 
+	/* use strlen for char count when ascii or dbcs*/
+	if(cc == -1 && (flags & MWTF_PACKMASK) == MWTF_ASCII)
+		cc = strlen((char *)str);
+
 	/* convert encoding if required*/
 	if((flags & (MWTF_PACKMASK|MWTF_DBCSMASK)) != defencoding) {
+		/* allocate enough for output string utf8/uc32 is max 4 bytes, uc16 max 2*/
+		buf = ALLOCA(cc * 4);
 		cc = GdConvertEncoding(str, flags, cc, buf, defencoding);
 		flags &= ~MWTF_PACKMASK;	/* keep DBCS bits for drawtext*/
 		flags |= defencoding;
 		text = buf;
 	} else text = str;
 
-	/* use strlen for char count when ascii or dbcs*/
-	if(cc == -1 && (flags & MWTF_PACKMASK) == MWTF_ASCII)
-		cc = strlen((char *)str);
-
-	if(cc <= 0 || !gr_pfont->fontprocs->DrawText)
+	if(cc <= 0 || !gr_pfont->fontprocs->DrawText) {
+		if (buf)
+			FREEA(buf);
 		return;
+	}
 
 	/* draw text string, DBCS flags may still be set*/
+#ifdef HAVE_KSC5601_SUPPORT
+	if (flags & MWTF_DBCS_EUCKR)
+		;
+	else
+#endif
 	if (!force_uc16)	/* remove DBCS flags if not needed*/
 		flags &= ~MWTF_DBCSMASK;
 	gr_pfont->fontprocs->DrawText(gr_pfont, psd, x, y, text, cc, flags);
+
+	if (buf)
+		FREEA(buf);
 }
 
 /*
@@ -603,7 +666,7 @@ gen16_drawtext(PMWFONT pfont, PSD psd, MWCOORD x, MWCOORD y,
 }
 #endif /* HAVE_FNT_SUPPORT | HAVE_PCF_SUPPORT*/
 
-#if HAVE_T1LIB_SUPPORT | HAVE_FREETYPE_SUPPORT
+#if HAVE_FREETYPE_SUPPORT
 /*
  * Produce blend table from src and dst based on passed alpha table
  * Used because we don't quite yet have GdArea with alphablending,
@@ -623,13 +686,13 @@ alphablend(PSD psd, OUTPIXELVAL *out, MWPIXELVAL src, MWPIXELVAL dst,
 
 #define BITS(pixel,shift,mask)	(((pixel)>>shift)&(mask))
 	    if(a == 0)
-		*out++ = dst;
+			*out++ = dst;
 	    else if(a == 255)
-		*out++ = src;
-	    else 
-		switch(psd->pixtype) {
+			*out++ = src;
+	    else switch(psd->pixtype) {
 	        case MWPF_TRUECOLOR0888:
 	        case MWPF_TRUECOLOR888:
+	        case MWPF_TRUECOLORABGR:  /* untested - r/b reversed but shouldn't matter*/
 		    d = BITS(dst, 16, 0xff);
 		    r = (unsigned char)(((BITS(src, 16, 0xff) - d)*a)>>8) + d;
 		    d = BITS(dst, 8, 0xff);
@@ -669,6 +732,16 @@ alphablend(PSD psd, OUTPIXELVAL *out, MWPIXELVAL src, MWPIXELVAL dst,
 		    *out++ = (r << 5) | (g << 2) | b;
 		    break;
 
+	        case MWPF_TRUECOLOR233:
+		    d = BITS(dst, 0, 0x07);
+		    r = (unsigned char)(((BITS(src, 0, 0x07) - d)*a)>>8) + d;
+		    d = BITS(dst, 3, 0x07);
+		    g = (unsigned char)(((BITS(src, 3, 0x07) - d)*a)>>8) + d;
+		    d = BITS(dst, 6, 0x03);
+		    b = (unsigned char)(((BITS(src, 6, 0x03) - d)*a)>>8) + d;
+		    *out++ = (r << 0) | (g << 3) | (b << 6);
+		    break;
+
 	        case MWPF_PALETTE:
 		    /* reverse lookup palette entry for blend ;-)*/
 		    palsrc = GETPALENTRY(gr_palette, src);
@@ -685,7 +758,7 @@ alphablend(PSD psd, OUTPIXELVAL *out, MWPIXELVAL src, MWPIXELVAL dst,
 	  	}
 	}
 }
-#endif /*HAVE_T1LIB_SUPPORT | HAVE_FREETYPE_SUPPORT*/
+#endif /*HAVE_FREETYPE_SUPPORT*/
 
 #if !HAVE_FREETYPE_SUPPORT
 int
@@ -731,13 +804,13 @@ GdConvertEncoding(const void *istr, MWTEXTFLAGS iflags, int cc, void *ostr,
 {
 	const unsigned char 	*istr8;
 	const unsigned short 	*istr16;
-	const unsigned long	*istr32;
+	const uint32_t	*istr32;
 	unsigned char 		*ostr8;
 	unsigned short 		*ostr16;
-	unsigned long		*ostr32;
+	uint32_t		*ostr32;
 	unsigned int		ch;
 	int			icc;
-	unsigned short		buf16[512];
+	unsigned short *buf16 = NULL;
 
 	iflags &= MWTF_PACKMASK|MWTF_DBCSMASK;
 	oflags &= MWTF_PACKMASK|MWTF_DBCSMASK;
@@ -748,12 +821,19 @@ GdConvertEncoding(const void *istr, MWTEXTFLAGS iflags, int cc, void *ostr,
 
 	/* first check for utf8 input encoding*/
 	if(iflags == MWTF_UTF8) {
+		/* allocate enough for output string, uc16 max 2*/
+		if (oflags != MWTF_UC16)
+			buf16 = ALLOCA(cc * 2);
+
 		/* we've only got uc16 now so convert to uc16...*/
 		cc = utf8_to_utf16((unsigned char *)istr, cc,
 			oflags==MWTF_UC16?(unsigned short*) ostr: buf16);
 
-		if(oflags == MWTF_UC16 || cc < 0)
+		if(oflags == MWTF_UC16 || cc < 0) {
+			if (buf16)
+				FREEA(buf16);
 			return cc;
+		}
 
 		/* will decode again to requested format (probably ascii)*/
 		iflags = MWTF_UC16;
@@ -764,6 +844,8 @@ GdConvertEncoding(const void *istr, MWTEXTFLAGS iflags, int cc, void *ostr,
 	if(iflags == MWTF_UC16 && oflags == MWTF_ASCII) {
 		/* only support uc16 convert to ascii now...*/
 		cc = UC16_to_GB( istr, cc, ostr);
+		if (buf16)
+			FREEA(buf16);
 		return cc;
 	}
 #endif
@@ -816,7 +898,11 @@ GdConvertEncoding(const void *istr, MWTEXTFLAGS iflags, int cc, void *ostr,
 			ch = *istr8++;
 			if (ch >= 0xA1 && ch <= 0xFE && icc &&
 			    *istr8 >= 0xA1 && *istr8 <= 0xFE) {
+#ifdef BIG_ENDIAN
 				ch = (ch << 8) | *istr8++;
+#else
+				ch = ch | (*istr8++ << 8);
+#endif
 				--icc;
 			}
 			break;
@@ -846,6 +932,9 @@ GdConvertEncoding(const void *istr, MWTEXTFLAGS iflags, int cc, void *ostr,
 		default:
 			*ostr8++ = (unsigned char)ch;
 			break;
+		case MWTF_UTF8:
+			ostr8 += uc16_to_utf8 ( (unsigned short*)(void*)&ch, 1, ostr8 );
+			break;
 		case MWTF_UC16:
 			*ostr16++ = (unsigned short)ch;
 			break;
@@ -859,6 +948,9 @@ GdConvertEncoding(const void *istr, MWTEXTFLAGS iflags, int cc, void *ostr,
 		}
 		++cc;
 	}
+
+	if (buf16)
+		FREEA(buf16);
 	return cc;
 }
 
@@ -886,7 +978,7 @@ GdGetTextSize(PMWFONT pfont, const void *str, int cc, MWCOORD *pwidth,
 	const void *	text;
 	MWTEXTFLAGS	defencoding = pfont->fontprocs->encoding;
 	int		force_uc16 = 0;
-	unsigned long	buf[256];
+	uint32_t *buf = NULL;
 
 	/* DBCS handled specially: see comment in GdText*/
 	if (flags & MWTF_DBCSMASK) {
@@ -898,20 +990,24 @@ GdGetTextSize(PMWFONT pfont, const void *str, int cc, MWCOORD *pwidth,
 		}
 	}
 
+	/* use strlen for char count when ascii or dbcs*/
+	if(cc == -1 && (flags & MWTF_PACKMASK) == MWTF_ASCII)
+		cc = strlen((char *)str);
+
 	/* convert encoding if required*/
 	if((flags & (MWTF_PACKMASK|MWTF_DBCSMASK)) != defencoding) {
+		/* allocate enough for output string utf8/uc32 is max 4 bytes, uc16 max 2*/
+		buf = ALLOCA(cc * 4);
 		cc = GdConvertEncoding(str, flags, cc, buf, defencoding);
 		flags &= ~MWTF_PACKMASK; /* keep DBCS bits for gettextsize*/
 		flags |= defencoding;
 		text = buf;
 	} else text = str;
 
-	/* use strlen for char count when ascii or dbcs*/
-	if(cc == -1 && (flags & MWTF_PACKMASK) == MWTF_ASCII)
-		cc = strlen((char *)str);
-
 	if(cc <= 0 || !pfont->fontprocs->GetTextSize) {
 		*pwidth = *pheight = *pbase = 0;
+		if (buf)
+			FREEA(buf);
 		return;
 	}
 
@@ -919,9 +1015,11 @@ GdGetTextSize(PMWFONT pfont, const void *str, int cc, MWCOORD *pwidth,
 	if (force_uc16)		/* if UC16 conversion forced, string is DBCS*/
 		dbcs_gettextsize(pfont, text, cc, flags, pwidth, pheight, pbase);
 	else pfont->fontprocs->GetTextSize(pfont, text, cc, flags, pwidth, pheight, pbase);
+
+	if (buf)
+		FREEA(buf);
 }
 
-#if HAVE_FREETYPE_2_SUPPORT
 /**
  * Create a new font, from a buffer.
  *
@@ -937,13 +1035,12 @@ GdGetTextSize(PMWFONT pfont, const void *str, int cc, MWCOORD *pwidth,
  * @return       New font, or NULL on error.
  */
 PMWFONT
-GdCreateFontFromBuffer(PSD psd, const unsigned char *buffer,
-		       unsigned length, const char *format, MWCOORD height)
+GdCreateFontFromBuffer(PSD psd, const unsigned char *buffer, unsigned length,
+	const char *format, MWCOORD height, MWCOORD width)
 {
 	PMWFONT pfont = NULL;
 
-	//assert(buffer);
-
+#if HAVE_FREETYPE_2_SUPPORT
 	/* EPRINTF("Nano-X: Font magic = '%c%c%c%c' @ GdCreateFontFromBuffer\n",
 	 * (char) buffer[0], (char) buffer[1], (char) buffer[2], (char) buffer[3]);
 	 */
@@ -954,12 +1051,11 @@ GdCreateFontFromBuffer(PSD psd, const unsigned char *buffer,
 	 * extension - e.g. TTF, PFR, ...)
 	 */
 
-	if (freetype2_init(psd)) {
-		pfont = (PMWFONT)freetype2_createfontfrombuffer(buffer, length, height);
-	}
+	//if (freetype_init(psd))
+		pfont = (PMWFONT)freetype2_createfontfrombuffer(buffer, length, height, width);
 	if (!pfont)
 		EPRINTF("GdCreateFontFromBuffer: create failed.\n");
-
+#endif
 	return pfont;
 }
 
@@ -972,17 +1068,14 @@ GdCreateFontFromBuffer(PSD psd, const unsigned char *buffer,
  * @return         New font.
  */
 PMWFONT
-GdDuplicateFont(PSD psd, PMWFONT psrcfont, MWCOORD fontsize)
+GdDuplicateFont(PSD psd, PMWFONT psrcfont, MWCOORD height, MWCOORD width)
 {
-	//assert(psd);
-	//assert(psrcfont);
-
+#if HAVE_FREETYPE_2_SUPPORT
 	if (psrcfont->fontprocs->Duplicate)
-		return psrcfont->fontprocs->Duplicate(psrcfont, fontsize);
-
+		return psrcfont->fontprocs->Duplicate(psrcfont, height, width);
+#endif
 	return psrcfont;
 }
-#endif /*HAVE_FREETYPE_2_SUPPORT*/
 
 /**
  * UTF-8 to UTF-16 conversion.  Surrogates are handeled properly, e.g.
@@ -1011,7 +1104,7 @@ utf8_to_utf16(const unsigned char *utf8, int cc, unsigned short *unicode16)
 {
 	int count = 0;
 	unsigned char c0, c1;
-	unsigned long scalar;
+	uint32_t scalar;
 
 	while(--cc >= 0) {
 		c0 = *utf8++;
@@ -1098,3 +1191,668 @@ utf8_to_utf16(const unsigned char *utf8, int cc, unsigned short *unicode16)
 	}
 	return count;
 }
+
+/* 
+ * warning: the length of output string may exceed six x the length of the input 
+ */ 
+static int
+uc16_to_utf8(const unsigned short *us, int cc, unsigned char *s)
+{
+	int i;
+	unsigned char *t = s;
+	unsigned short uc16;
+	
+	for (i = 0; i < cc; i++) {
+		uc16 = us[i];
+		if (uc16 <= 0x7F) { 
+			*t++ = (char) uc16;
+		} else if (uc16 <= 0x7FF) {
+			*t++ = 0xC0 | (unsigned char) ((uc16 >> 6) & 0x1F); /* upper 5 bits */
+			*t++ = 0x80 | (unsigned char) (uc16 & 0x3F);        /* lower 6 bits */
+		} else {
+			*t++ = 0xE0 | (unsigned char) ((uc16 >> 12) & 0x0F);/* upper 4 bits */
+			*t++ = 0x80 | (unsigned char) ((uc16 >> 6) & 0x3F); /* next 6 bits */
+			*t++ = 0x80 | (unsigned char) (uc16 & 0x3F);        /* lowest 6 bits */
+		}
+	}
+	*t = 0;
+	return (t - s);
+}
+
+/* 
+   UTF8 utility: 
+   This map return the expected count of bytes based on the first char 
+ */
+const char utf8_len_map[256] = {
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+  3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,1,1
+};
+
+
+#ifdef DEBUG_TEXT_SHAPING
+/*
+ *  Return the number of character (not byte) of UTF-8 string
+ */
+int utf8_nchar ( const char *str )
+{
+	int n = 0;
+	int al = strlen ( str );
+
+	while ( n < al )
+		n += utf8_len_map[(unsigned char)str[n]];
+	return (n < al) ? n : al;
+}
+
+static void	dumpUtf8 ( const char *str, int sz )
+{
+	int i, n;
+	unsigned short uc16;
+	const char *last = str+sz;
+
+	printf ( "UTF-8 dump:\n" );
+	while ( str < last ) {
+		for ( i=0, n=utf8_len_map[(unsigned char)str[0]]; i < n; i++ )
+			printf ( "%02X", (unsigned char)str[i] );
+		utf8_to_utf16 ( str, n, &uc16 );
+		printf ( ": %04X\n", uc16 );
+		str += n;
+	}
+}
+#endif	
+
+#if HAVE_SHAPEJOINING_SUPPORT
+typedef struct char_shaped {
+	unsigned short isolated;
+	unsigned short initial;
+	unsigned short medial;
+	unsigned short final;
+} chr_shpjoin_t;
+
+/* This table start from a base of 0x0621, up to 0x06D3 */
+
+#define SHAPED_TABLE_START	0x0621
+#define SHAPED_TABLE_TOP	0x06D3
+
+static const chr_shpjoin_t shaped_table[] =
+{
+	/*  base       s       i       m       f */
+	{ /*0x0621*/ 0xFE80, 0x0000, 0x0000, 0x0000, },  /* HAMZA */
+	{ /*0x0622*/ 0xFE81, 0x0000, 0x0000, 0xFE82, },  /* ALEF_MADDA */
+	{ /*0x0623*/ 0xFE83, 0x0000, 0x0000, 0xFE84, },  /* ALEF_HAMZA_ABOVE */
+	{ /*0x0624*/ 0xFE85, 0x0000, 0x0000, 0xFE86, },  /* WAW_HAMZA */
+	{ /*0x0625*/ 0xFE87, 0x0000, 0x0000, 0xFE88, },  /* ALEF_HAMZA_BELOW */
+	{ /*0x0626*/ 0xFE89, 0xFE8B, 0xFE8C, 0xFE8A, },  /* YEH_HAMZA */
+	{ /*0x0627*/ 0xFE8D, 0x0000, 0x0000, 0xFE8E, },  /* ALEF */
+	{ /*0x0628*/ 0xFE8F, 0xFE91, 0xFE92, 0xFE90, },  /* BEH */
+	{ /*0x0629*/ 0xFE93, 0x0000, 0x0000, 0xFE94, },  /* TEH_MARBUTA */
+	{ /*0x062A*/ 0xFE95, 0xFE97, 0xFE98, 0xFE96, },  /* TEH */
+	{ /*0x062B*/ 0xFE99, 0xFE9B, 0xFE9C, 0xFE9A, },  /* THEH */
+	{ /*0x062C*/ 0xFE9D, 0xFE9F, 0xFEA0, 0xFE9E, },  /* JEEM */
+	{ /*0x062D*/ 0xFEA1, 0xFEA3, 0xFEA4, 0xFEA2, },  /* HAH */
+	{ /*0x062E*/ 0xFEA5, 0xFEA7, 0xFEA8, 0xFEA6, },  /* KHAH */
+	{ /*0x062F*/ 0xFEA9, 0x0000, 0x0000, 0xFEAA, },  /* DAL */
+	{ /*0x0630*/ 0xFEAB, 0x0000, 0x0000, 0xFEAC, },  /* THAL */
+	{ /*0x0631*/ 0xFEAD, 0x0000, 0x0000, 0xFEAE, },  /* REH */
+	{ /*0x0632*/ 0xFEAF, 0x0000, 0x0000, 0xFEB0, },  /* ZAIN */
+	{ /*0x0633*/ 0xFEB1, 0xFEB3, 0xFEB4, 0xFEB2, },  /* SEEN */
+	{ /*0x0634*/ 0xFEB5, 0xFEB7, 0xFEB8, 0xFEB6, },  /* SHEEN */
+	{ /*0x0635*/ 0xFEB9, 0xFEBB, 0xFEBC, 0xFEBA, },  /* SAD */
+	{ /*0x0636*/ 0xFEBD, 0xFEBF, 0xFEC0, 0xFEBE, },  /* DAD */
+	{ /*0x0637*/ 0xFEC1, 0xFEC3, 0xFEC4, 0xFEC2, },  /* TAH */
+	{ /*0x0638*/ 0xFEC5, 0xFEC7, 0xFEC8, 0xFEC6, },  /* ZAH */
+	{ /*0x0639*/ 0xFEC9, 0xFECB, 0xFECC, 0xFECA, },  /* AIN */
+	{ /*0x063A*/ 0xFECD, 0xFECF, 0xFED0, 0xFECE, },  /* GHAIN */
+	{ /*0x063B*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x063C*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x063D*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x063E*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x063F*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0640*/ 0x0640, 0x0640, 0x0640, 0x0640, },  /* TATWEEL */
+	{ /*0x0641*/ 0xFED1, 0xFED3, 0xFED4, 0xFED2, },  /* FEH */
+	{ /*0x0642*/ 0xFED5, 0xFED7, 0xFED8, 0xFED6, },  /* QAF */
+	{ /*0x0643*/ 0xFED9, 0xFEDB, 0xFEDC, 0xFEDA, },  /* KAF */
+	{ /*0x0644*/ 0xFEDD, 0xFEDF, 0xFEE0, 0xFEDE, },  /* LAM */
+	{ /*0x0645*/ 0xFEE1, 0xFEE3, 0xFEE4, 0xFEE2, },  /* MEEM */
+	{ /*0x0646*/ 0xFEE5, 0xFEE7, 0xFEE8, 0xFEE6, },  /* NOON */
+	{ /*0x0647*/ 0xFEE9, 0xFEEB, 0xFEEC, 0xFEEA, },  /* HEH */
+	{ /*0x0648*/ 0xFEED, 0x0000, 0x0000, 0xFEEE, },  /* WAW */
+	{ /*0x0649*/ 0xFEEF, 0xFBE8, 0xFBE9, 0xFEF0, },  /* ALEF_MAKSURA */
+	{ /*0x064A*/ 0xFEF1, 0xFEF3, 0xFEF4, 0xFEF2, },  /* YEH */
+	{ /*0x064B*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x064C*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x064D*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x064E*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x064F*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0650*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0651*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0652*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0653*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0654*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0655*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0656*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0657*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0658*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0659*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x065A*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x065B*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x065C*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x065D*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x065E*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x065F*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0660*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0661*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0662*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0663*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0664*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0665*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0666*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0667*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0668*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0669*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x066A*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x066B*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x066C*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x066D*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x066E*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x066F*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0670*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0671*/ 0xFB50, 0x0000, 0x0000, 0xFB51, },
+	{ /*0x0672*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0673*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0674*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0675*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0676*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0677*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0678*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0679*/ 0xFB66, 0xFB68, 0xFB69, 0xFB67, },
+	{ /*0x067A*/ 0xFB5E, 0xFB60, 0xFB61, 0xFB5F, },
+	{ /*0x067B*/ 0xFB52, 0xFB54, 0xFB55, 0xFB53, },
+	{ /*0x067C*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x067D*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x067E*/ 0xFB56, 0xFB58, 0xFB59, 0xFB57, },
+	{ /*0x067F*/ 0xFB62, 0xFB64, 0xFB65, 0xFB63, },
+	{ /*0x0680*/ 0xFB5A, 0xFB5C, 0xFB5D, 0xFB5B, },
+	{ /*0x0681*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0682*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0683*/ 0xFB76, 0xFB78, 0xFB79, 0xFB77, },
+	{ /*0x0684*/ 0xFB72, 0xFB74, 0xFB75, 0xFB73, },
+	{ /*0x0685*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0686*/ 0xFB7A, 0xFB7C, 0xFB7D, 0xFB7B, },
+	{ /*0x0687*/ 0xFB7E, 0xFB80, 0xFB81, 0xFB7F, },
+	{ /*0x0688*/ 0xFB88, 0x0000, 0x0000, 0xFB89, },
+	{ /*0x0689*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x068A*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x068B*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x068C*/ 0xFB84, 0x0000, 0x0000, 0xFB85, },
+	{ /*0x068D*/ 0xFB82, 0x0000, 0x0000, 0xFB83, },
+	{ /*0x068E*/ 0xFB86, 0x0000, 0x0000, 0xFB87, },
+	{ /*0x068F*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0690*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0691*/ 0xFB8C, 0x0000, 0x0000, 0xFB8D, },
+	{ /*0x0692*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0693*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0694*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0695*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0696*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0697*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x0698*/ 0xFB8A, 0x0000, 0x0000, 0xFB8B, },
+	{ /*0x0699*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x069A*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x069B*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x069C*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x069D*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x069E*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x069F*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A0*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A1*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A2*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A3*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A4*/ 0xFB6A, 0xFB6C, 0xFB6D, 0xFB6B, },
+	{ /*0x06A5*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A6*/ 0xFB6E, 0xFB70, 0xFB71, 0xFB6F, },
+	{ /*0x06A7*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A8*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06A9*/ 0xFB8E, 0xFB90, 0xFB91, 0xFB8F, },
+	{ /*0x06AA*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06AB*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06AC*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06AD*/ 0xFBD3, 0xFBD5, 0xFBD6, 0xFBD4, },
+	{ /*0x06AE*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06AF*/ 0xFB92, 0xFB94, 0xFB95, 0xFB93, },
+	{ /*0x06B0*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06B1*/ 0xFB9A, 0xFB9C, 0xFB9D, 0xFB9B, },
+	{ /*0x06B2*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06B3*/ 0xFB96, 0xFB98, 0xFB99, 0xFB97, },
+	{ /*0x06B4*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06B5*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06B6*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06B7*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06B8*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06B9*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06BA*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06BB*/ 0xFBA0, 0xFBA2, 0xFBA3, 0xFBA1, },
+	{ /*0x06BC*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06BD*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06BE*/ 0xFBAA, 0xFBAC, 0xFBAD, 0xFBAB, },
+	{ /*0x06BF*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06C0*/ 0xFBA4, 0x0000, 0x0000, 0xFBA5, },
+	{ /*0x06C1*/ 0xFBA6, 0xFBA8, 0xFBA9, 0xFBA7, },
+	{ /*0x06C2*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06C3*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06C4*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06C5*/ 0xFBE0, 0x0000, 0x0000, 0xFBE1, },
+	{ /*0x06C6*/ 0xFBD9, 0x0000, 0x0000, 0xFBDA, },
+	{ /*0x06C7*/ 0xFBD7, 0x0000, 0x0000, 0xFBD8, },
+	{ /*0x06C8*/ 0xFBDB, 0x0000, 0x0000, 0xFBDC, },
+	{ /*0x06C9*/ 0xFBE2, 0x0000, 0x0000, 0xFBE3, },
+	{ /*0x06CA*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06CB*/ 0xFBDE, 0x0000, 0x0000, 0xFBDF, },
+	{ /*0x06CC*/ 0xFBFC, 0xFBFE, 0xFBFF, 0xFBFD, },
+	{ /*0x06CD*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06CE*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06CF*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06D0*/ 0xFBE4, 0xFBE6, 0xFBE7, 0xFBE5, },
+	{ /*0x06D1*/ 0x0000, 0x0000, 0x0000, 0x0000, },  /* dummy filler */
+	{ /*0x06D2*/ 0xFBAE, 0x0000, 0x0000, 0xFBAF, },
+	{ /*0x06D3*/ 0xFBB0, 0x0000, 0x0000, 0xFBB1, },
+};
+
+#define SHAPED_TABLE2_START	0xFEF5
+#define SHAPED_TABLE2_TOP	0xFEFB
+
+/*
+ * The second table is for special ligatures
+ */
+static const chr_shpjoin_t shaped_table2[] =
+{
+	{ /*0xFEF5*/ 0xFEF5, 0x0000, 0x0000, 0xFEF6, }, /* LAM_ALEF_MADDA */
+	{ /*0xFEF6*/ 0x0000, 0x0000, 0x0000, 0x0000, }, /* dummy filler */
+	{ /*0xFEF7*/ 0xFEF7, 0x0000, 0x0000, 0xFEF8, }, /* LAM_ALEF_HAMZA_ABOVE */
+	{ /*0xFEF8*/ 0x0000, 0x0000, 0x0000, 0x0000, }, /* dummy filler */
+	{ /*0xFEF9*/ 0xFEF9, 0x0000, 0x0000, 0xFEFA, }, /* LAM_ALEF_HAMZA_BELOW */
+	{ /*0xFEFA*/ 0x0000, 0x0000, 0x0000, 0x0000, }, /* dummy filler */
+	{ /*0xFEFB*/ 0xFEFB, 0x0000, 0x0000, 0xFEFC, }, /* LAM_ALEF */
+};
+
+#define assignShape(chr)	( ((chr) >= SHAPED_TABLE_START  && (chr) <= SHAPED_TABLE_TOP)? \
+				    &shaped_table[(chr)-SHAPED_TABLE_START] : \
+                                  ((chr) >= SHAPED_TABLE2_START && (chr) <= SHAPED_TABLE2_TOP)? \
+				    &shaped_table2[(chr)-SHAPED_TABLE2_START] : NULL) 
+
+#define assignShapeUtf(txt, i) ( (utf8_len_map[(unsigned char)((txt)[(i)])] > 1)? \
+					doAssignShapeUtf((txt)+(i)) : NULL)
+
+static const chr_shpjoin_t *
+doAssignShapeUtf(const char *txt)
+{
+	unsigned short fs;
+
+	utf8_to_utf16((const unsigned char *) txt,
+		      utf8_len_map[(unsigned char) txt[0]], &fs);
+	return assignShape(fs);
+}
+
+
+static void
+storeUc_2_Utf8(char *dest, int *psz, unsigned short wch)
+{
+	int cb = uc16_to_utf8(&wch, 1, dest + (*psz));
+
+	*psz = *psz + cb;
+}
+
+
+static void
+store_Utf8(char *dest, int *psz, const char *txt)
+{
+	int cb = utf8_len_map[(unsigned char) txt[0]];
+
+	memcpy(dest + (*psz), txt, cb);
+	*psz = *psz + cb;
+}
+
+/*
+ * Note that text is currently left to right
+ */
+static unsigned short *
+arabicJoin_UC16(const unsigned short *text, int len, unsigned long *pAttrib)
+{
+	int i;
+	unsigned short *new_str;
+	const chr_shpjoin_t *prev = NULL;
+	const chr_shpjoin_t *curr = NULL;
+	const chr_shpjoin_t *next = NULL;
+	unsigned long attrib = 0;
+
+	new_str = (unsigned short *) malloc((1 + len) * sizeof(unsigned short));
+	if (new_str == NULL)
+		return NULL;
+
+	for (i = 0; i < len; i++) {
+		if ((curr = assignShape(text[i])) != NULL) {
+			if (i < len - 1)
+				next = assignShape(text[i + 1]);
+			else
+				next = NULL;
+			if (next) {
+				if (prev) {
+					if (!prev->initial || !prev->medial)
+						new_str[i] = curr->initial ?
+							curr->initial : curr->isolated;
+					else
+						new_str[i] = curr->medial ?
+							curr->medial : curr->final;
+				} else {
+					new_str[i] = curr->initial ?
+						curr->initial : curr->isolated;
+				}
+			} else {
+				if (prev) {
+					if (!prev->initial || !prev->medial)
+						new_str[i] = curr->isolated;
+					else
+						new_str[i] = curr->final ?
+							curr->final : curr->isolated;
+				} else {
+					new_str[i] = curr->isolated;
+				}
+			}
+			attrib |= (TEXTIP_SHAPED | TEXTIP_EXTENDED);
+		} else {
+			new_str[i] = text[i];
+			if (text[i] <= 0xFF)
+				attrib |= TEXTIP_STANDARD;
+			else
+				attrib |= TEXTIP_EXTENDED;
+		}
+
+		prev = curr;
+	}
+	new_str[i] = 0;
+	if (pAttrib)
+		*pAttrib = attrib;
+	return new_str;
+}
+
+/*
+ * Note that text is currently left to right
+ */
+char *
+arabicJoin_UTF8(const char *text, int len, int *pNewLen, unsigned long *pAttrib)
+{
+	int i, sz;
+	char *new_str;
+	const chr_shpjoin_t *prev = NULL;
+	const chr_shpjoin_t *curr = NULL;
+	const chr_shpjoin_t *next = NULL;
+	unsigned long attrib = 0;
+
+	/* Note that shaping may result in three UTF-8 bytes, due to 06xx -> FBxx translation*/
+	/* two times the original buffer should be enough...*/
+	new_str = (char *) malloc((1 + 2 * len) * sizeof(char));
+	if (new_str == NULL)
+		return NULL;
+
+	sz = 0;
+
+	for (i = 0; i < len;) {
+		int b = utf8_len_map[(unsigned char) text[i]];
+		if ((curr = assignShapeUtf(text, i)) != NULL) {
+			if (i < len - b)
+				next = assignShapeUtf(text, i + b);
+			else
+				next = NULL;
+			if (next) {
+				if (prev) {
+					if (!prev->initial || !prev->medial)
+						storeUc_2_Utf8(new_str, &sz,
+							       (curr->initial ? curr->initial :
+								curr->isolated));
+					else
+						storeUc_2_Utf8(new_str, &sz,
+							       (curr->medial ? curr->medial :
+								curr->final));
+				} else {
+					storeUc_2_Utf8(new_str, &sz, (curr->initial ?
+							curr->initial : curr-> isolated));
+				}
+			} else {
+				if (prev) {
+					if (!prev->initial || !prev->medial)
+						storeUc_2_Utf8(new_str, &sz, curr->isolated);
+					else
+						storeUc_2_Utf8(new_str, &sz,
+							       (curr->final ? curr->final :
+							       curr->isolated));
+				} else {
+					storeUc_2_Utf8(new_str, &sz, curr->isolated);
+				}
+			}
+			attrib |= (TEXTIP_SHAPED | TEXTIP_EXTENDED);
+		} else {
+			store_Utf8(new_str, &sz, text + i);
+			if ((unsigned char) text[i] < 0xC0)
+				attrib |= TEXTIP_STANDARD;
+			else
+				attrib |= TEXTIP_EXTENDED;
+		}
+
+		i += b;
+		prev = curr;
+	}
+	new_str[sz] = 0;
+	if (pNewLen)
+		*pNewLen = sz;
+	if (pAttrib)
+		*pAttrib = attrib;
+#ifdef DEBUG_TEXT_SHAPING
+	if (strcmp(new_str, text))
+		dumpUtf8(new_str, sz);
+#endif
+	return new_str;
+}
+
+unsigned short *
+doCharShape_UC16(const unsigned short *text, int len, int *pNewLen, unsigned long *pAttrib)
+{
+	unsigned short *conv = arabicJoin_UC16(text, len, pAttrib);
+
+	if (pNewLen)
+		*pNewLen = len;
+	return conv;
+}
+
+char *
+doCharShape_UTF8(const char *text, int len, int *pNewLen, unsigned long *pAttrib)
+{
+	return arabicJoin_UTF8(text, len, pNewLen, pAttrib);
+}
+
+#else /* HAVE_SHAPEJOINING_SUPPORT */
+/* DUMMY FUNCTIONS */
+unsigned short *
+doCharShape_UC16(const unsigned short *text, int len, int *pNewLen, unsigned long *pAttrib)
+{
+	unsigned short *conv = malloc((len + 1) * sizeof(unsigned short));
+
+	if (conv == NULL)
+		return NULL;
+	memcpy(conv, text, len * sizeof(unsigned short));
+	conv[len] = 0;
+	if (pNewLen)
+		*pNewLen = len;
+	if (pAttrib)
+		*pAttrib = 0;
+	return conv;
+}
+
+char *
+doCharShape_UTF8(const char *text, int len, int *pNewLen, unsigned long *pAttrib)
+{
+	char *conv = malloc((len + 1) * sizeof(char));
+
+	if (conv == NULL)
+		return NULL;
+	memcpy(conv, text, len * sizeof(char));
+	conv[len] = 0;
+	if (pNewLen)
+		*pNewLen = len;
+	if (pAttrib)
+		*pAttrib = 0;
+	return conv;
+}
+#endif /* HAVE_SHAPEJOINING_SUPPORT */
+
+
+#if HAVE_FRIBIDI_SUPPORT
+#include <fribidi/fribidi.h>
+
+char *
+doCharBidi_UTF8(const char *text, int len, int *v2lPos, char *pDirection, unsigned long *pAttrib)
+{
+	FriBidiChar *ftxt, *fvirt;
+	FriBidiChar localBuff[128];
+	FriBidiCharType basedir;
+	int cc;
+	int isLocal = 0;
+	char *new_str;
+	int new_len;
+
+	new_str = (char *) malloc(len + 1);
+	if (new_str == NULL)
+		return NULL;
+
+	/* len may be greather than real char count, but it's ok.
+	   if will fit in localBuff, we use it to improve speed */
+	if (len < sizeof(localBuff) / sizeof(localBuff[0]) / 2) {
+		ftxt = localBuff;
+		fvirt = localBuff +
+			sizeof(localBuff) / sizeof(localBuff[0]) / 2;
+		isLocal = 1;
+	} else {
+		ftxt = (FriBidiChar *) malloc((len + 1) * sizeof(FriBidiChar));
+		fvirt = (FriBidiChar *) malloc((len + 1) * sizeof(FriBidiChar));
+	}
+
+	if (ftxt == NULL)
+		return NULL;
+	if (fvirt == NULL) {
+		free(ftxt);
+		return NULL;
+	}
+
+	cc = fribidi_utf8_to_unicode((char *) text, len, ftxt);
+	basedir = FRIBIDI_TYPE_N;
+	fribidi_log2vis(ftxt, cc, &basedir, fvirt, v2lPos, NULL, pDirection);
+	new_len = fribidi_unicode_to_utf8(fvirt, cc, new_str);
+
+	if (pAttrib) {
+		if (basedir & FRIBIDI_MASK_RTL)
+			*pAttrib |= TEXTIP_RTOL;
+	}
+
+	if (!isLocal) {
+		free(fvirt);
+		free(ftxt);
+	}
+	new_str[new_len] = 0;
+	return new_str;
+}
+
+
+unsigned short *
+doCharBidi_UC16(const unsigned short *text, int len, int *v2lPos, char *pDirection, unsigned long *pAttrib)
+{
+	FriBidiChar *ftxt, *fvirt;
+	FriBidiChar localBuff[128];
+	FriBidiCharType basedir;
+	int cc;
+	int isLocal = 0;
+	unsigned short *new_str;
+
+	new_str = (unsigned short *) malloc((len + 1) * sizeof(unsigned short));
+	if (new_str == NULL)
+		return NULL;
+
+	/* len may be greather than real char count, but it's ok.
+	   if will fit in localBuff, we use it to improve speed */
+	if (len < sizeof(localBuff) / sizeof(localBuff[0]) / 2) {
+		ftxt = localBuff;
+		fvirt = localBuff +
+			sizeof(localBuff) / sizeof(localBuff[0]) / 2;
+		isLocal = 1;
+	} else {
+		ftxt = (FriBidiChar *) malloc((len + 1) * sizeof(FriBidiChar));
+		fvirt = (FriBidiChar *) malloc((len + 1) * sizeof(FriBidiChar));
+	}
+
+	if (ftxt == NULL)
+		return NULL;
+	if (fvirt == NULL) {
+		free(ftxt);
+		return NULL;
+	}
+
+	for (cc = 0; cc < len; cc++)
+		ftxt[cc] = text[cc];
+	basedir = FRIBIDI_TYPE_N;
+	fribidi_log2vis(ftxt, cc, &basedir, fvirt, v2lPos, NULL, pDirection);
+	for (cc = 0; cc < len; cc++)
+		new_str[cc] = (unsigned short) fvirt[cc];
+	new_str[cc] = 0;
+
+	if (pAttrib) {
+		if (basedir & FRIBIDI_MASK_RTL)
+			*pAttrib |= TEXTIP_RTOL;
+	}
+
+	if (!isLocal) {
+		free(fvirt);
+		free(ftxt);
+	}
+	return new_str;
+}
+
+#else
+/* DUMMY FUNCTIONS */
+char *
+doCharBidi_UTF8(const char *text, int len, int *v2lPos, char *pDirection, unsigned long *pAttrib)
+{
+	int i;
+	unsigned short *conv = malloc((len + 1) * sizeof(unsigned short));
+
+	if (conv == NULL)
+		return NULL;
+	memcpy(conv, text, len * sizeof(unsigned short));
+	conv[len] = 0;
+	if (v2lPos)
+		for (i = 0; i < len; i++)
+			v2lPos[i] = i;
+	if (pDirection)
+		memset(pDirection, 0, len * sizeof(pDirection[0]));
+	return (char *) conv;
+}
+unsigned short *
+doCharBidi_UC16(const unsigned short *text, int len, int *v2lPos, char *pDirection, unsigned long *pAttrib)
+{
+	int i;
+	char *conv = malloc((len + 1) * sizeof(char));
+
+	if (conv == NULL)
+		return NULL;
+	memcpy(conv, text, len * sizeof(char));
+	conv[len] = 0;
+	if (v2lPos)
+		for (i = 0; i < len; i++)
+			v2lPos[i] = i;
+	if (pDirection)
+		memset(pDirection, 0, len * sizeof(pDirection[0]));
+	return (unsigned short *) conv;
+}
+#endif /* HAVE_FRIBIDI_SUPPORT */

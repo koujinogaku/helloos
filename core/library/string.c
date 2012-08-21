@@ -175,7 +175,7 @@ strncmpi( void *dest, const void *src, unsigned int n )
     return 0;
 }
 
-int strlen(char *chr)
+int strlen(const char *chr)
 {
   int len;
 

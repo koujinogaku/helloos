@@ -4,18 +4,18 @@
  */
 #include "string.h"
 #include "mouse.h"
+
 #include "device.h"
 
 #define	SCALE		3	/* default scaling factor for acceleration */
 #define	THRESH		5	/* default threshhold for acceleration */
 
-int  	MOU_Open(MOUSEDEVICE *pmd);
-void 	MOU_Close(void);
-int  	MOU_GetButtonInfo(void);
-void	MOU_GetDefaultAccel(int *pscale,int *pthresh);
-int  	MOU_Read(MWCOORD *dx, MWCOORD *dy, MWCOORD *dz, int *bp);
-int	MOU_Poll(void);
-
+static int  	MOU_Open(MOUSEDEVICE *pmd);
+static void 	MOU_Close(void);
+static int  	MOU_GetButtonInfo(void);
+static void	MOU_GetDefaultAccel(int *pscale,int *pthresh);
+static int  	MOU_Read(MWCOORD *dx, MWCOORD *dy, MWCOORD *dz, int *bp);
+static int	MOU_Poll(void);
 
 MOUSEDEVICE mousedev = {
     MOU_Open,
@@ -32,22 +32,21 @@ MOUSEDEVICE mousedev = {
  * Returns the fd if successful, or negative if unsuccessful.
  */
 static int MOU_origmode;
-int MOU_Open(MOUSEDEVICE *pmd)
+static int MOU_Open(MOUSEDEVICE *pmd)
 {
     if (mouse_init() < 0)
-	return -1;
+		return -1;
     /* return the x11 file descriptor for select */
     if(mouse_request_code(TRUE) < 0)
 	return -1;
     MOU_origmode=mouse_set_wait(FALSE);
 
-    return 1;
-}
+    return 1;}
 
 /*
  * Close the mouse device.
  */
-void
+static void
 MOU_Close(void)
 {
     mouse_request_code(FALSE);
@@ -57,7 +56,7 @@ MOU_Close(void)
 /*
  * Get mouse buttons supported
  */
-int
+static int
 MOU_GetButtonInfo(void)
 {
 	return MWBUTTON_L | MWBUTTON_R;
@@ -66,7 +65,7 @@ MOU_GetButtonInfo(void)
 /*
  * Get default mouse acceleration settings
  */
-void
+static void
 MOU_GetDefaultAccel(int *pscale,int *pthresh)
 {
     *pscale = SCALE;
@@ -80,7 +79,7 @@ MOU_GetDefaultAccel(int *pscale,int *pthresh)
  * When a new state is read, the current buttons and x and y deltas
  * are returned.  This routine does not block.
  */
-int
+static int
 MOU_Read(MWCOORD *dx, MWCOORD *dy, MWCOORD *dz, int *bp)
 {
     int button=0,mdx=0,mdy=0;

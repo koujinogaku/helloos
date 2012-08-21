@@ -1,9 +1,7 @@
 /*
- * Copyright (c) 1999, 2000, 2001, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999,2000,2001,2003,2005,2007,2010 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Portions Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Device-independent mid level drawing and color routines.
  *
@@ -13,8 +11,9 @@
  * only called when it is known that all the pixels to be drawn are
  * within the device area and are visible.
  */
-/*#define NDEBUG*/
 #include "portunixstd.h"
+#include "swap.h"
+
 #include "device.h"
 
 extern MWPIXELVAL gr_foreground;      /* current foreground color */
@@ -26,8 +25,8 @@ extern int	  gr_firstuserpalentry;/* first user-changable palette entry*/
 extern int 	  gr_nextpalentry;    /* next available palette entry*/
 
 /* These support drawing dashed lines */
-extern unsigned long gr_dashmask;     /* An actual bitmask of the dash values */
-extern unsigned long gr_dashcount;    /* The number of bits defined in the dashmask */
+extern uint32_t gr_dashmask;     /* An actual bitmask of the dash values */
+extern uint32_t gr_dashcount;    /* The number of bits defined in the dashmask */
 
 extern int        gr_fillmode;
 
@@ -149,7 +148,7 @@ GdSetBackgroundColor(PSD psd, MWCOLORVAL bg)
  * Set the dash mode for future drawing
  */
 void
-GdSetDash(unsigned long *mask, int *count)
+GdSetDash(uint32_t *mask, int *count)
 {
 	int oldm = gr_dashmask;
 	int oldc = gr_dashcount;
@@ -489,7 +488,7 @@ GdRect(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height)
 void
 GdFillRect(PSD psd, MWCOORD x1, MWCOORD y1, MWCOORD width, MWCOORD height)
 {
-	unsigned long dm = 0;
+	uint32_t dm = 0;
 	int dc = 0;
 
 	MWCOORD x2 = x1 + width - 1;
@@ -531,122 +530,6 @@ GdFillRect(PSD psd, MWCOORD x1, MWCOORD y1, MWCOORD width, MWCOORD height)
 	/* Restore the dash settings */
 	GdSetDash(&dm, &dc);
 
-	GdFixCursor(psd);
-}
-
-/**
- * Draw a rectangular area using the current clipping region and the
- * specified bit map.  This differs from rectangle drawing in that the
- * rectangle is drawn using the foreground color and possibly the background
- * color as determined by the bit map.  Each row of bits is aligned to the
- * next bitmap word boundary (so there is padding at the end of the row).
- * (I.e. each row begins at the start of a new MWIMAGEBITS value).
- * The background bit values are only written if the gr_usebg flag
- * is set.
- * The function drawbitmap performs no clipping, GdBitmap clips.
- *
- * @param psd Drawing surface.
- * @param x Left edge of destination rectangle.
- * @param y Top edge of destination rectangle.
- * @param width Width of bitmap.  Equal to width of destination rectangle.
- * @param height Height of bitmap.  Equal to height of destination rectangle.
- * @param imagebits The bitmap to draw.
- */
-void
-drawbitmap(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
-	const MWIMAGEBITS *imagebits)
-{
-	MWCOORD minx;
-	MWCOORD maxx;
-	MWIMAGEBITS bitvalue = 0;	/* bitmap word value */
-	int bitcount;			/* number of bits left in bitmap word */
-
-	if (width <= 0 || height <= 0)
-		return;
-
-	if (gr_usebg)
-		psd->FillRect(psd, x, y, x + width - 1, y + height - 1,
-			gr_background);
-
-	/* FIXME think of the speedups if this existed...
-	psd->DrawBitmap(psd, x, y, width, height, imagebits, gr_foreground);
-	return;
-	*/
-
-	minx = x;
-	maxx = x + width - 1;
-	bitcount = 0;
-	while (height > 0) {
-		if (bitcount <= 0) {
-			bitcount = MWIMAGE_BITSPERIMAGE;
-			bitvalue = *imagebits++;
-		}
-		/* draw without clipping*/
-		if (MWIMAGE_TESTBIT(bitvalue))
-			psd->DrawPixel(psd, x, y, gr_foreground);
-		bitvalue = MWIMAGE_SHIFTBIT(bitvalue);
-		bitcount--;
-		if (x++ == maxx) {
-			x = minx;
-			y++;
-			--height;
-			bitcount = 0;
-		}
-	}
-}
-
-void
-GdBitmap(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
-	const MWIMAGEBITS *imagebits)
-{
-	MWCOORD minx;
-	MWCOORD maxx;
-	MWPIXELVAL savecolor;		/* saved foreground color */
-	MWIMAGEBITS bitvalue = 0;	/* bitmap word value */
-	int bitcount;			/* number of bits left in bitmap word */
-
-	if (width <= 0 || height <= 0)
-		return;
-
-	switch (GdClipArea(psd, x, y, x + width - 1, y + height - 1)) {
-	case CLIP_VISIBLE:
-		drawbitmap(psd, x, y, width, height, imagebits);
-		GdFixCursor(psd);
-		return;
-
-	case CLIP_INVISIBLE:
-		return;
-	}
-
-	/* The rectangle is partially visible, so must do clipping. First
-	 * fill a rectangle in the background color if necessary.
-	 */
-	if (gr_usebg) {
-		savecolor = gr_foreground;
-		gr_foreground = gr_background;
-		/* note: change to fillrect*/
-		GdFillRect(psd, x, y, width, height);
-		gr_foreground = savecolor;
-	}
-	minx = x;
-	maxx = x + width - 1;
-	bitcount = 0;
-	while (height > 0) {
-		if (bitcount <= 0) {
-			bitcount = MWIMAGE_BITSPERIMAGE;
-			bitvalue = *imagebits++;
-		}
-		if (MWIMAGE_TESTBIT(bitvalue) && GdClipPoint(psd, x, y))
-			psd->DrawPixel(psd, x, y, gr_foreground);
-			bitvalue = MWIMAGE_SHIFTBIT(bitvalue);
-			bitcount--;
-		if (x++ == maxx) {
-			x = minx;
-			y++;
-			--height;
-			bitcount = 0;
-		}
-	}
 	GdFixCursor(psd);
 }
 
@@ -749,6 +632,64 @@ GdMakePaletteConversionTable(PSD psd,MWPALENTRY *palette,int palsize,
 	}
 }
 
+/*
+ * Alpha drawing using C bitfields.  Experimental,
+ * uses bitfields rather than explicit bit-twiddling.
+ */
+
+/* ARGB8888 : 0xaarrggbb order (little endian frame buffer format BB GG RR AA)*/
+typedef union {
+	struct {
+/* use processor byte endianness rather than bitfield order*/
+#if !MW_CPU_BIG_ENDIAN
+		unsigned char b; 
+		unsigned char g;
+		unsigned char r;
+		unsigned char a; // MSByte on little endian
+#else
+		unsigned char a; // MSByte on big endian
+		unsigned char r;
+		unsigned char g;
+		unsigned char b; 
+#endif
+	} f;
+	unsigned int v; 
+} ARGB8888;	
+
+typedef union {
+	/* bitfield order should use __BIG_ENDIAN_BITFIELDS, assuming so with big endian byte order*/
+	struct {
+#if !MW_CPU_BIG_ENDIAN	
+		unsigned short b:5; 
+		unsigned short g:6;
+		unsigned short r:5; // MSBit on little endian
+#else
+		unsigned short r:5; // MSBit on big endian
+		unsigned short g:6;
+		unsigned short b:5;
+#endif
+	} f;
+	unsigned short v; 
+} RGB565;	
+
+typedef union {
+	/* bitfield order should use __BIG_ENDIAN_BITFIELDS, assuming so with big endian byte order*/
+	struct {
+#if !MW_CPU_BIG_ENDIAN	
+		unsigned short b:5; 
+		unsigned short g:5;
+		unsigned short r:5;
+		unsigned short a:1; // MSBit on little endian
+#else
+		unsigned short a:1; // MSBit on big endian
+		unsigned short r:5;
+		unsigned short g:5;
+		unsigned short b:5; 
+#endif		
+	} f;
+	unsigned short v; 
+} RGB555;	
+
 /**
  * Draw a color bitmap image in 1, 4, 8, 24 or 32 bits per pixel.  The
  * Microwindows color image format is DWORD padded bytes, with
@@ -776,14 +717,13 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 	MWPIXELVAL pixel;
 	int clip;
 	int extra, linesize;
-	int rgborder;
+	int rgborder, alpha;
 	MWCOLORVAL cr;
 	MWCOORD yoff;
-	unsigned long transcolor;
+	uint32_t transcolor;
 	MWPIXELVAL convtable[256];
 
 	assert(pimage);
-
 	height = pimage->height;
 	width = pimage->width;
 
@@ -808,10 +748,9 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 
 		/* The following is no longer used.  One reason is that it required */
 		/* the transparent color to be unique, which was unnessecary        */
-
 		/* convert transcolor to converted palette index for speed*/
 		/* if (transcolor != -1L)
-		   transcolor = (unsigned long) convtable[transcolor];  */
+		   transcolor = (uint32_t) convtable[transcolor];  */
 	}
 
 	minx = x;
@@ -836,7 +775,11 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 		linesize = width*4;
 		break;
 	case 24:
+	case 18:
 		linesize = width*3;
+		break;
+	case 16:
+		linesize = width*2;
 		break;
 	case 4:
 		linesize = PIX2BYTES(width<<2);
@@ -847,29 +790,45 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 	}
 	extra = pimage->pitch - linesize;
 
-	/* 24bpp RGB rather than BGR byte order?*/
+	/* Image format in RGB rather than BGR byte order?*/
 	rgborder = pimage->compression & MWIMAGE_RGB; 
 
-	if ((bpp == 32)
-	    && ((pimage->compression & MWIMAGE_ALPHA_CHANNEL) != 0)) {
-		long *data = (long *) imagebits;
-
-		/* DPRINTF("Nano-X: GdDrawImage (%d,%d) %dx%d x=%d-%d\n  ",
-		   x,y,width,height,minx,maxx); */
+	/*
+	 * Handle images with alpha channel.
+	 * Image format must be in 32bpp and have byte order
+	 *    MWIMAGE_RGB: RR GG BB AA
+	 * or MWIMAGE_BGR: BB GG RR AA
+	 */
+	if (pimage->compression & MWIMAGE_ALPHA_CHANNEL) {
+		int32_t *data = (int32_t *)imagebits;
 
 		while (height > 0) {
-
+			/* 
+			 * Grab 32 bits of data using processor endianness.
+			 * For little endian:
+			 *	MWIMAGE_RGB will be long word 0xAABBGGRR (ABGR)
+			 *  MWIMAGE_BGR will be long word 0xAARRGGBB (ARGB)
+			 *
+			 * For big endian:
+			 *	MWIMAGE_RGB will be long word 0xRRGGBBAA (RGBA)
+			 *  MWIMAGE_BGR will be long word 0xBBGGRRAA (BGRA)
+			 */
 			cr = *data++;
+
+			/*
+			 * Convert to ARGB (MWPIXELVAL little endian framebuffer format)
+			 */
 #if MW_CPU_BIG_ENDIAN
-			if (rgborder)
-			{
-				/* Fix endian and swap R/B order */
+			if (rgborder) {
+				/*
+				 * cr is RGBA, shift RGB >> 8 and A << 24 to ARGB.
+				 */
 				cr =  ((cr & 0xFFFFFF00UL) >> 8)
 					| ((cr & 0x000000FFUL) << 24);
-			}
-			else
-			{
-				/* Fix endian */
+			} else {
+				/*
+				 * cr is BGRA, swap endianness to ARGB.
+				 */
 				cr =  ((cr & 0xFF000000UL) >> 24)
 					| ((cr & 0x00FF0000UL) >> 8)
 					| ((cr & 0x0000FF00UL) << 8)
@@ -877,75 +836,218 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 			}
 #else /* little endian*/
 			if (rgborder) {
-				/* Swap R/B order */
+				/* 
+				 * cr is ABGR, swap R/B to ARGB.
+				 */
 				cr = (cr & 0xFF00FF00UL)
 					| ((cr & 0x00FF0000UL) >> 16)
 					| ((cr & 0x000000FFUL) << 16);
+			} else {
+				/*
+				 * cr is ARGB, no change needed.
+				 */
 			}
 #endif
+			/* cr is now in ARGB(0xaarrggbb) format*/
+			alpha = (cr >> 24);
+			if (alpha != 0) { /* skip if pixel is fully transparent*/
+				if (clip == CLIP_VISIBLE || GdClipPoint(psd, x, y)) {
+					switch (psd->pixtype) {
+#if 1 /* alpha blending*/
+					/* implement alpha blending image draw from image alpha channel*/
+					case MWPF_TRUECOLOR8888:
+					case MWPF_TRUECOLOR0888:
+					case MWPF_TRUECOLOR888:
+						if (alpha == 255)
+							pixel = cr;		/* both cr and pixel are ARGB (0xAARRGGBB)*/
+						else {					
+							/* ARGB8888   : 0xAARRGGBB*/
+							/* MWPIXELVAL : 0x00RRGGBB*/
+							ARGB8888 	  fg;
+							ARGB8888 	  bg;
 
-			switch (psd->pixtype) {
-			case MWPF_PALETTE:
-			default:
-				pixel = GdFindColor(psd, cr);
-				break;
-			case MWPF_TRUECOLOR8888:
-				pixel = COLOR2PIXEL8888(cr);
-				break;
-			case MWPF_TRUECOLOR0888:
-			case MWPF_TRUECOLOR888:
-				pixel = COLOR2PIXEL888(cr);
-				break;
-			case MWPF_TRUECOLOR565:
-				pixel = COLOR2PIXEL565(cr);
-				break;
-			case MWPF_TRUECOLOR555:
-				pixel = COLOR2PIXEL555(cr);
-				break;
-			case MWPF_TRUECOLOR332:
-				pixel = COLOR2PIXEL332(cr);
-				break;
+							fg.v = cr;
+							bg.v = psd->ReadPixel(psd,x,y);
+
+ 							//bg +=muldiv255(a,fg-bg)
+							bg.f.r += muldiv255(alpha, fg.f.r - bg.f.r);
+							bg.f.g += muldiv255(alpha, fg.f.g - bg.f.g);
+							bg.f.b += muldiv255(alpha, fg.f.b - bg.f.b);
+
+							//d += muldiv255(a, 255 - d)
+ 							bg.f.a += muldiv255(alpha, 255 - bg.f.a);
+
+ 							//d = muldiv255(d, 255 - a) + a
+ 							//bg.f.a = muldiv255(bg.f.a, 255 - alpha) + alpha;
+
+							pixel = bg.v;	/* endian swap handled with ARGB8888 struct*/
+						}
+						break;
+					case MWPF_TRUECOLORABGR:
+						if (alpha == 255)
+							pixel = PIXEL888TOCOLORVAL(cr);	/* convert ARGB cr to ABGR pixel*/
+						else {					
+							/* ARGB8888   : 0xAARRGGBB*/
+							/* MWPIXELVAL : 0xAABBGGRR*/
+							ARGB8888 	  fg;
+							ARGB8888 	  bg;
+
+							/* tricky code: just swap red/blue from above case for bg pixel*/
+							fg.v = cr;
+							bg.v = psd->ReadPixel(psd,x,y);
+
+ 							//bg +=muldiv255(a,fg-bg)
+							bg.f.b += muldiv255(alpha, fg.f.r - bg.f.b); /* actually bg red*/
+							bg.f.g += muldiv255(alpha, fg.f.g - bg.f.g);
+							bg.f.r += muldiv255(alpha, fg.f.b - bg.f.r); /* actually bg blue*/
+
+							//d += muldiv255(a, 255 - d)
+ 							bg.f.a += muldiv255(alpha, 255 - bg.f.a);
+
+							pixel = bg.v;	/* endian swap handled with ARGB8888 struct*/
+						}
+						break;
+					case MWPF_TRUECOLOR565:
+						if (alpha == 255)
+							pixel = ARGB2PIXEL565(cr);
+						else {
+							/* ARGB565    : 0xAARRGGBB*/
+							/* MWPIXELVAL : r/g/b 5/6/5*/
+							ARGB8888  fg;							
+							RGB565 	  bg;
+
+							/*
+							 * 1) case: DrawPixel(x,y,c)
+							 * c=(b)rrrrrggg,gggbbbbb (MSB,LSB order)
+							 * memory format at address fb(x,y). i.e. ADDR (lo,hi addr order)
+							 *          ADDR[0],  ADDR[1]
+							 * little : gggbbbbb,rrrrrggg 
+							 * big    : rrrrrggg,gggbbbbb 
+ 							 * 
+							 * 2) case: ushort c = ReadPixel(x,y)
+							 * ushort c format. (MSB,LSB order)
+							 * 			     MSB      LSB
+							 * little : c=(b)rrrrrggg,gggbbbbb 
+							 * big    : c=(b)rrrrrggg,gggbbbbb 
+							 */
+							fg.v = cr;
+							bg.v = psd->ReadPixel(psd,x,y);
+
+ 							//bg +=mulscale(a,fg-bg)
+							bg.f.r += mulscale(alpha, fg.f.r - (bg.f.r<<3), 11);
+							bg.f.g += mulscale(alpha, fg.f.g - (bg.f.g<<2), 10);
+							bg.f.b += mulscale(alpha, fg.f.b - (bg.f.b<<3), 11);
+
+							//bg.f.a = 0;
+							pixel = bg.v;
+						}
+						break;
+					case MWPF_TRUECOLOR555:
+						if (alpha == 255)
+							pixel = (
+										(((cr) & 0x0000f8) >> 3) | 
+										(((cr) & 0x00f800) >> 6) | 
+										(((cr) & 0xf80000) >> 9)
+									);
+						else {
+							/* ARGB8888   : 0xAARRGGBB*/
+							/* MWPIXELVAL : r/g/b 5/5/5*/
+							ARGB8888  fg;							
+							RGB555 	  bg;
+							
+							fg.v = cr;
+							bg.v = psd->ReadPixel(psd,x,y);
+
+ 							//bg +=mulscale(a,fg-bg)
+							bg.f.r += mulscale(alpha, fg.f.r - (bg.f.r<<3), 11);
+							bg.f.g += mulscale(alpha, fg.f.g - (bg.f.g<<3), 11);
+							bg.f.b += mulscale(alpha, fg.f.b - (bg.f.b<<3), 11);
+
+							//bg.f.a = 0;
+							pixel = bg.v;
+						}
+						break;
+#else /* !alpha blending*/
+					/* implement image draw without alpha blending*/
+					/*
+					 * Draw without alpha blending.
+					 * Must convert cr from ARGB format to ABGR colorval.
+					 */
+					case MWPF_TRUECOLOR8888:
+						pixel = COLOR2PIXEL8888(ARGB2COLORVAL(cr));
+						break;
+					case MWPF_TRUECOLORABGR:
+						pixel = COLOR2PIXELABGR(ARGB2COLORVAL(cr));
+						break;
+					case MWPF_TRUECOLOR0888:
+					case MWPF_TRUECOLOR888:
+						pixel = COLOR2PIXEL888(ARGB2COLORVAL(cr));
+						break;
+					case MWPF_TRUECOLOR565:
+						pixel = COLOR2PIXEL565(ARGB2COLORVAL(cr));
+						break;
+					case MWPF_TRUECOLOR555:
+						pixel = COLOR2PIXEL555(ARGB2COLORVAL(cr));
+						break;
+#endif /* alpha blending*/
+
+					case MWPF_PALETTE:
+					default:
+						pixel = GdFindColor(psd, ARGB2COLORVAL(cr));
+						break;
+					case MWPF_TRUECOLOR332:
+						pixel = COLOR2PIXEL332(ARGB2COLORVAL(cr));
+						break;
+					case MWPF_TRUECOLOR233:
+						pixel = COLOR2PIXEL233(ARGB2COLORVAL(cr));
+						break;
+					}
+					psd->DrawPixel(psd, x, y, pixel);
+
+				}
 			}
-
-			if (clip == CLIP_VISIBLE || GdClipPoint(psd, x, y))
-				psd->DrawPixel(psd, x, y, pixel);
 
 			if (x++ == maxx) {
-				/* printf("EOL\n  "); */
 				x = minx;
 				y += yoff;
-				height--;
-				data = (long *) (((char *) data) + extra);
+				--height;
+				data = (int32_t *) (((char *) data) + extra);
 			}
 		}
-		/* printf("End of image\n"); */
-	} else if ((bpp == 24) || (bpp == 32)) {
-		long trans;
+		/* end of alpha channel image handling*/
+		GdFixCursor(psd);
+		return;
+	}
 
+	/* handle non-alpha images of 16, 18, 24 or 32bpp*/
+	if (bpp > 8) {
 		while (height > 0) {
-			/* RGB rather than BGR byte order? */
-			trans = cr = rgborder
-				? MWRGB(imagebits[0], imagebits[1],
-					imagebits[2])
-				: MWRGB(imagebits[2], imagebits[1],
-					imagebits[0]);
+			/* get value in correct RGB or BGR byte order*/
+			if (bpp == 24 || bpp == 18) {
+				cr = rgborder
+					? MWRGB(imagebits[0], imagebits[1], imagebits[2])
+					: MWRGB(imagebits[2], imagebits[1], imagebits[0]);
+				imagebits += 3;
+			} else if (bpp == 32) {
+				cr = rgborder
+					? MWARGB(imagebits[3],imagebits[0], imagebits[1], imagebits[2])
+					: MWARGB(imagebits[3],imagebits[2], imagebits[1], imagebits[0]);
+				imagebits += 4;
+			} else {	/* 16 bpp*/
+#if MW_CPU_BIG_ENDIAN
+				unsigned int pv = (imagebits[0] << 8) | imagebits[1];
+#else
+				unsigned int pv = (imagebits[1] << 8) | imagebits[0];
+#endif
 
-			imagebits += 3;
-
-			if (bpp == 32) {
-				/*
-				 * FIXME Currently, XPM is the only image
-				 * decoder that creates 32bpp images with
-				 * transparency. This is done specifying the
-				 * transparent color 0x01000000, using 0x01
-				 * in the alpha channel as the indicator.
-				 */
-				if (*imagebits++ == 0x01)
-					trans = 0x01000000;
+				cr = (pimage->compression & MWIMAGE_555)
+					? PIXEL555TOCOLORVAL(pv)
+					: PIXEL565TOCOLORVAL(pv);
+				imagebits += 2;
 			}
 
 			/* handle transparent color */
-			if (transcolor != trans) {
+			if (transcolor != cr) {
 
 				switch (psd->pixtype) {
 				case MWPF_PALETTE:
@@ -954,6 +1056,9 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 					break;
 				case MWPF_TRUECOLOR8888:
 					pixel = COLOR2PIXEL8888(cr);
+					break;
+				case MWPF_TRUECOLORABGR:
+					pixel = COLOR2PIXELABGR(cr);
 					break;
 				case MWPF_TRUECOLOR0888:
 				case MWPF_TRUECOLOR888:
@@ -968,29 +1073,34 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 				case MWPF_TRUECOLOR332:
 					pixel = COLOR2PIXEL332(cr);
 					break;
+				case MWPF_TRUECOLOR233:
+					pixel = COLOR2PIXEL233(cr);
+					break;
 				}
 
-				if (clip == CLIP_VISIBLE
-				    || GdClipPoint(psd, x, y))
+				if (clip == CLIP_VISIBLE || GdClipPoint(psd, x, y))
 					psd->DrawPixel(psd, x, y, pixel);
 #if 0
 				/* fix: use clipmaxx to clip quicker */
-				else if (clip != CLIP_VISIBLE && !clipresult
-					 && x > clipmaxx) {
+				else if (clip != CLIP_VISIBLE && !clipresult && x > clipmaxx)
 					x = maxx;
-				}
 #endif
 			}
 
 			if (x++ == maxx) {
 				x = minx;
 				y += yoff;
-				height--;
+				--height;
 				imagebits += extra;
 			}
 		}
-	} else {  /* bpp == 8, 4, or 1, palettized image. */
+		GdFixCursor(psd);
+		return;
+		/* end of 16, 18, 24 or 32bpp non-alpha image handling*/
+	}
 
+	/* handle palettized images of 8, 4 or 1bpp*/
+	{
 		bitcount = 0;
 		while (height > 0) {
 			if (bitcount <= 0) {
@@ -1033,21 +1143,20 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 				psd->DrawPixel(psd, x, y, pixel);
 #if 0
 			/* fix: use clipmaxx to clip quicker */
-			else if (clip != CLIP_VISIBLE && !clipresult
-				 && x > clipmaxx) {
+			else if (clip != CLIP_VISIBLE && !clipresult && x > clipmaxx)
 				x = maxx;
-			}
 #endif
-		      next:
+		next:
 			if (x++ == maxx) {
 				x = minx;
 				y += yoff;
-				height--;
+				--height;
 				bitcount = 0;
 				imagebits += extra;
 			}
 		}
 	}
+	/* end of palettized images of 8, 4 or 1bpp handling*/
 	GdFixCursor(psd);
 }
 
@@ -1083,114 +1192,6 @@ GdReadArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
 	GdFixCursor(psd);
 }
 
-/*
- * A wrapper for psd->DrawArea which performs clipping.
- * The gc->dst[x,y,w,h] values are clipped.  The gc->src[x,y]
- * values are adjusted accordingly.
- *
- * This function does NOT have a fallback implementation
- * if the function is not supported by the driver.
- *
- * It is the caller's responsibility to GdFixCursor(psd).
- *
- * This is a low-level function.
- */
-void
-GdDrawAreaInternal(PSD psd, driver_gc_t * gc, int op)
-{
-	MWCOORD x = gc->dstx;
-	MWCOORD y = gc->dsty;
-	MWCOORD width = gc->dstw;
-	MWCOORD height = gc->dsth;
-	MWCOORD srcx;
-	MWCOORD srcy;
-	int clipped;
-	int rx1, rx2, ry1, ry2, rw, rh;
-	int count;
-#if DYNAMICREGIONS
-	MWRECT *prc;
-	extern MWCLIPREGION *clipregion;
-#else
-	MWCLIPRECT *prc;
-	extern MWCLIPRECT cliprects[];
-	extern int clipcount;
-#endif
-
-	if (!psd->DrawArea)
-		return;
-
-	/* Set up area clipping, and just return if nothing is visible */
-	clipped = GdClipArea(psd, x, y, x + width - 1, y + height - 1);
-	if (clipped == CLIP_INVISIBLE) {
-		return;
-	} else if (clipped == CLIP_VISIBLE) {
-		psd->DrawArea(psd, gc, op);
-		return;
-	}
-	/* Partially clipped. */
-
-	/* Save srcX/Y so we can change the originals. */
-	srcx = gc->srcx;
-	srcy = gc->srcy;
-
-#if DYNAMICREGIONS
-	prc = clipregion->rects;
-	count = clipregion->numRects;
-#else
-	prc = cliprects;
-	count = clipcount;
-#endif
-
-	while (count-- > 0) {
-#if DYNAMICREGIONS
-		rx1 = prc->left;
-		ry1 = prc->top;
-		rx2 = prc->right;
-		ry2 = prc->bottom;
-#else
-		/* New clip-code by Morten */
-		rx1 = prc->x;
-		ry1 = prc->y;
-		rx2 = prc->x + prc->width;
-		ry2 = prc->y + prc->height;
-#endif
-
-		/* Check if this rect intersects with the one we draw */
-		if (rx1 < x)
-			rx1 = x;
-		if (ry1 < y)
-			ry1 = y;
-		if (rx2 > x + width)
-			rx2 = x + width;
-		if (ry2 > y + height)
-			ry2 = y + height;
-
-		rw = rx2 - rx1;
-		rh = ry2 - ry1;
-
-		if (rw > 0 && rh > 0) {
-			gc->dstx = rx1;
-			gc->dsty = ry1;
-			gc->dstw = rw;
-			gc->dsth = rh;
-			gc->srcx = srcx + rx1 - x;
-			gc->srcy = srcy + ry1 - y;
-			GdCheckCursor(psd, rx1, ry1, rx2 - 1, ry2 - 1);
-			psd->DrawArea(psd, gc, op);
-		}
-		prc++;
-	}
-
-	/* Reset everything, in case the caller re-uses it. */
-	gc->dstx = x;
-	gc->dsty = y;
-	gc->dstw = width;
-	gc->dsth = height;
-	gc->srcx = srcx;
-	gc->srcy = srcy;
-	return;
-}
-
 /**
  * Draw a rectangle of color values, clipping if necessary.
  * If a color matches the background color,
@@ -1199,15 +1200,17 @@ GdDrawAreaInternal(PSD psd, driver_gc_t * gc, int op)
  * The pixels are packed according to pixtype:
  *
  * pixtype		array of
- * MWPF_RGB		MWCOLORVAL (unsigned long)
+ * MWPF_RGB		MWCOLORVAL (uint32_t)
  * MWPF_PIXELVAL	MWPIXELVAL (compile-time dependent)
  * MWPF_PALETTE		unsigned char
- * MWPF_TRUECOLOR8888	unsigned long
- * MWPF_TRUECOLOR0888	unsigned long
+ * MWPF_TRUECOLOR8888	uint32_t
+ * MWPF_TRUECOLORABGR	uint32_t
+ * MWPF_TRUECOLOR0888	uint32_t
  * MWPF_TRUECOLOR888	packed struct {char r,char g,char b} (24 bits)
  * MWPF_TRUECOLOR565	unsigned short
  * MWPF_TRUECOLOR555	unsigned short
  * MWPF_TRUECOLOR332	unsigned char
+ * MWPF_TRUECOLOR233	unsigned char
  *
  * NOTE: Currently, no translation is performed if the pixtype
  * is not MWPF_RGB.  Pixtype is only then used to determine the
@@ -1233,10 +1236,10 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 	int pixtype)
 {
 	unsigned char *PIXELS = pixels;	/* for ANSI compilers, can't use void*/
-	long cellstodo;			/* remaining number of cells */
-	long count;			/* number of cells of same color */
-	long cc;			/* current cell count */
-	long rows;			/* number of complete rows */
+	int32_t cellstodo;			/* remaining number of cells */
+	int32_t count;			/* number of cells of same color */
+	int32_t cc;			/* current cell count */
+	int32_t rows;			/* number of complete rows */
 	MWCOORD minx;			/* minimum x value */
 	MWCOORD maxx;			/* maximum x value */
 	MWPIXELVAL savecolor;		/* saved foreground color */
@@ -1245,40 +1248,38 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 	int pixsize;
 	unsigned char r, g, b;
 
+	/* check for hw pixel format and low level driver drawarea call*/
+	if (pixtype == MWPF_HWPIXELVAL && (psd->flags & PSF_HAVEOP_COPY)) {
+		driver_gc_t hwgc;
+
+		hwgc.data = PIXELS;
+		hwgc.src_linelen = width;
+		hwgc.usebg = gr_usebg;
+		hwgc.bg_color = gr_background;
+		hwgc.dstx = x;
+		hwgc.dsty = y;
+		hwgc.width = width;
+		hwgc.height = height;
+		hwgc.srcx = 0;
+		hwgc.srcy = 0;
+		hwgc.op = PSDOP_COPY;
+		GdDrawAreaInternal(psd, &hwgc);
+
+		GdFixCursor(psd);
+		return;
+	}
+
+	/* no fast low level routine, draw point-by-point...*/
 	minx = x;
 	maxx = x + width - 1;
 
 	/* Set up area clipping, and just return if nothing is visible */
-	if ( GdClipArea(psd, minx, y, maxx, y + height - 1) == CLIP_INVISIBLE )
+	if (GdClipArea(psd, minx, y, maxx, y + height - 1) == CLIP_INVISIBLE )
 		return;
 
-/* psd->DrawArea driver call temp removed, hasn't been tested with new drawarea routines*/
-#if 0000
-	if (pixtype == MWPF_PIXELVAL) {
-		driver_gc_t hwgc;
-
-		if (!(psd->flags & PSF_HAVEOP_COPY))
-			goto fallback;
-
-		hwgc.pixels = PIXELS;
-		hwgc.src_linelen = width;
-		hwgc.gr_usebg = gr_usebg;
-		hwgc.bg_color = gr_background;
-		hwgc.dstx = x;
-		hwgc.dsty = y;
-		hwgc.dstw = width;
-		hwgc.dsth = height;
-		hwgc.srcx = 0;
-		hwgc.srcy = 0;
-		GdDrawAreaInternal(psd, &hwgc, PSDOP_COPY);
-		GdFixCursor(psd);
-		return;
-	      fallback:
-	}
-	GdFixCursor(psd);
-	return;
- fallback:
-#endif /* if 0000 temp removed*/
+	/* convert MWPF_HWPIXELVAL to real pixel type*/
+	if (pixtype == MWPF_HWPIXELVAL)
+		pixtype = psd->pixtype;
 
 	/* Calculate size of packed pixels*/
 	switch(pixtype) {
@@ -1289,12 +1290,14 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 		pixsize = sizeof(MWPIXELVAL);
 		break;
 	case MWPF_PALETTE:
+	case MWPF_TRUECOLOR233:
 	case MWPF_TRUECOLOR332:
 		pixsize = sizeof(unsigned char);
 		break;
 	case MWPF_TRUECOLOR8888:
 	case MWPF_TRUECOLOR0888:
-		pixsize = sizeof(unsigned long);
+	case MWPF_TRUECOLORABGR:
+		pixsize = sizeof(uint32_t);
 		break;
 	case MWPF_TRUECOLOR888:
 		pixsize = 3;
@@ -1322,13 +1325,15 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 		PIXELS += sizeof(MWPIXELVAL);
 		break;
 	case MWPF_PALETTE:
+	case MWPF_TRUECOLOR233:
 	case MWPF_TRUECOLOR332:
 		gr_foreground = *PIXELS++;
 		break;
+	case MWPF_TRUECOLORABGR:
 	case MWPF_TRUECOLOR8888:
 	case MWPF_TRUECOLOR0888:
-		gr_foreground = *(unsigned long *)PIXELS;
-		PIXELS += sizeof(unsigned long);
+		gr_foreground = *(uint32_t *)PIXELS;
+		PIXELS += sizeof(uint32_t);
 		break;
 	case MWPF_TRUECOLOR888:
 		r = *PIXELS++;
@@ -1361,11 +1366,13 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 			PIXELS += sizeof(MWCOLORVAL);
 			break;
 		case MWPF_PIXELVAL:
+		case MWPF_HWPIXELVAL:
 			if(gr_foreground != *(MWPIXELVAL *)PIXELS)
 				goto breakwhile;
 			PIXELS += sizeof(MWPIXELVAL);
 			break;
 		case MWPF_PALETTE:
+		case MWPF_TRUECOLOR233:
 		case MWPF_TRUECOLOR332:
 			if(gr_foreground != *(unsigned char *)PIXELS)
 				goto breakwhile;
@@ -1373,9 +1380,10 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 			break;
 		case MWPF_TRUECOLOR8888:
 		case MWPF_TRUECOLOR0888:
-			if(gr_foreground != *(unsigned long *)PIXELS)
+		case MWPF_TRUECOLORABGR:
+			if(gr_foreground != *(uint32_t *)PIXELS)
 				goto breakwhile;
-			PIXELS += sizeof(unsigned long);
+			PIXELS += sizeof(uint32_t);
 			break;
 		case MWPF_TRUECOLOR888:
 			r = *(unsigned char *)PIXELS;
@@ -1476,640 +1484,6 @@ GdCopyArea(PSD psd, MWCOORD srcx, MWCOORD srcy, MWCOORD width, MWCOORD height,
 }
 #endif
 
-extern MWCLIPREGION *clipregion;
-
-/**
- * Copy source rectangle of pixels to destination rectangle quickly
- *
- * @param dstpsd Drawing surface to draw to.
- * @param dstx Destination X co-ordinate.
- * @param dsty Destination Y co-ordinate.
- * @param width Width of rectangle to copy.
- * @param height Height of rectangle to copy.
- * @param srcpsd Drawing surface to copy from.
- * @param srcx Source X co-ordinate.
- * @param srcy Source Y co-ordinate.
- * @param rop Raster operation.
- */
-void
-GdBlit(PSD dstpsd, MWCOORD dstx, MWCOORD dsty, MWCOORD width, MWCOORD height,
-	PSD srcpsd, MWCOORD srcx, MWCOORD srcy, long rop)
-{
-	int rx1, rx2, ry1, ry2;
-	int px1, px2, py1, py2;
-	int pw, ph;
-	int count;
-#if DYNAMICREGIONS
-	MWRECT *	prc;
-#else
-	MWCLIPRECT *	prc;
-	extern MWCLIPRECT cliprects[];
-	extern int clipcount;
-#endif
-
-	/*FIXME: compare bpp's and convert if necessary*/
-	assert(dstpsd->planes == srcpsd->planes);
-	assert(dstpsd->bpp == srcpsd->bpp);
-
-	/* temporary assert() until rotation blits completed*/
-	assert(dstpsd->portrait == srcpsd->portrait);
-	
-	/* clip blit rectangle to source screen/bitmap size*/
-	/* we must do this because there isn't any source clipping setup*/
-	if(srcx < 0) {
-		width += srcx;
-		dstx -= srcx;
-		srcx = 0;
-	}
-	if(srcy < 0) {
-		height += srcy;
-		dsty -= srcy;
-		srcy = 0;
-	}
-	if(srcx+width > srcpsd->xvirtres)
-		width = srcpsd->xvirtres - srcx;
-	if(srcy+height > srcpsd->yvirtres)
-		height = srcpsd->yvirtres - srcy;
-
-	switch(GdClipArea(dstpsd, dstx, dsty, dstx+width-1, dsty+height-1)) {
-	case CLIP_VISIBLE:
-		/* check cursor in src region of both screen devices*/
-		GdCheckCursor(dstpsd, srcx, srcy, srcx+width-1, srcy+height-1);
-		if (dstpsd != srcpsd)
-			GdCheckCursor(srcpsd, srcx, srcy, srcx+width-1,
-				srcy+height-1);
-		dstpsd->Blit(dstpsd, dstx, dsty, width, height,
-			srcpsd, srcx, srcy, rop);
-		GdFixCursor(dstpsd);
-		if (dstpsd != srcpsd)
-			GdFixCursor(srcpsd);
-		return;
-
-	case CLIP_INVISIBLE:
-		return;
-	}
-
-	/* Partly clipped, we'll blit using destination clip
-	 * rectangles, and offset the blit accordingly.
-	 * Since the destination is already clipped, we
-	 * only need to clip the source here.
-	 */
-#if DYNAMICREGIONS
-	prc = clipregion->rects;
-	count = clipregion->numRects;
-#else
-	prc = cliprects;
-	count = clipcount;
-#endif
-	while(--count >= 0) {
-#if DYNAMICREGIONS
-		rx1 = prc->left;
-		ry1 = prc->top;
-		rx2 = prc->right;
-		ry2 = prc->bottom;
-#else
-		rx1 = prc->x;
-		ry1 = prc->y;
-		rx2 = prc->x + prc->width;
-		ry2 = prc->y + prc->height;
-#endif
-		/* Check:  does this rect intersect the one we want to draw? */
-		px1 = dstx;
-		py1 = dsty;
-		px2 = dstx + width;
-		py2 = dsty + height;
-		if (px1 < rx1) px1 = rx1;
-		if (py1 < ry1) py1 = ry1;
-		if (px2 > rx2) px2 = rx2;
-		if (py2 > ry2) py2 = ry2;
-
-		pw = px2 - px1;
-		ph = py2 - py1;
-		if(pw > 0 && ph > 0) {
-			/* check cursor in dest and src regions*/
-			GdCheckCursor(dstpsd, px1, py1, px2-1, py2-1);
-			GdCheckCursor(dstpsd, srcx, srcy,
-				srcx+width, srcy+height);
-			dstpsd->Blit(dstpsd, px1, py1, pw, ph, srcpsd,
-				srcx + (px1-dstx), srcy + (py1-dsty), rop);
-		}
-		++prc;
-	}
-	GdFixCursor(dstpsd);
-}
-
-/* experimental globals for ratio bug when src != 0*/
-/* Only used by fblin16.c */
-int g_row_inc, g_col_inc;
-
-/**
- * Stretch source rectangle of pixels to destination rectangle quickly
- *
- * @param dstpsd Drawing surface to draw to.
- * @param dstx Destination X co-ordinate.
- * @param dsty Destination Y co-ordinate.
- * @param dstw Width of destination rectangle.
- * @param dsth Height of destination rectangle.
- * @param srcpsd Drawing surface to copy from.
- * @param srcx Source X co-ordinate.
- * @param srcy Source Y co-ordinate.
- * @param srcw Width of source rectangle.
- * @param srch Height of source rectangle.
- * @param rop Raster operation.
- */
-void
-GdStretchBlit(PSD dstpsd, MWCOORD dstx, MWCOORD dsty, MWCOORD dstw,
-	MWCOORD dsth, PSD srcpsd, MWCOORD srcx, MWCOORD srcy, MWCOORD srcw,
-	MWCOORD srch, long rop)
-{
-	int count;
-#if DYNAMICREGIONS
-	MWRECT *	prc;
-	extern MWCLIPREGION *clipregion;
-#else
-	MWCLIPRECT *	prc;
-	extern MWCLIPRECT cliprects[];
-	extern int clipcount;
-#endif
-
-#if 1 /* FIXME*/
-	/* Use new improved stretchblit if the driver supports it */
-	if (dstpsd->StretchBlitEx) {
-		GdStretchBlitEx(dstpsd, dstx, dsty,
-				dstx + dstw, dsty + dsth,
-				srcpsd, srcx, srcy,
-				srcx + srcw, srcy + srch,
-				rop);
-		return;
-	}
-#endif
-
-g_row_inc = g_col_inc = 0;
-
-	/* check for driver stretch blit implementation*/
-	if (!dstpsd->StretchBlit)
-		return;
-
-	/*FIXME: compare bpp's and convert if necessary*/
-	assert(dstpsd->planes == srcpsd->planes);
-	assert(dstpsd->bpp == srcpsd->bpp);
-	
-	/* clip blit rectangle to source screen/bitmap size*/
-	/* we must do this because there isn't any source clipping setup*/
-	if(srcx < 0) {
-		srcw += srcx;
-		/*dstx -= srcx;*/
-		srcx = 0;
-	}
-	if(srcy < 0) {
-		srch += srcy;
-		/*dsty -= srcy;*/
-		srcy = 0;
-	}
-	if(srcx+srcw > srcpsd->xvirtres)
-		srcw = srcpsd->xvirtres - srcx;
-	if(srcy+srch > srcpsd->yvirtres)
-		srch = srcpsd->yvirtres - srcy;
-
-	/* temp dest clipping for partially visible case*/
-	if(dstx+dstw > dstpsd->xvirtres)
-		dstw = dstpsd->xvirtres - dstx;
-	if(dsty+dsth > dstpsd->yvirtres)
-		dsth = dstpsd->yvirtres - dsty;
-
-	switch(GdClipArea(dstpsd, dstx, dsty, dstx+dstw-1, dsty+dsth-1)) {
-	case CLIP_VISIBLE:
-		/* check cursor in src region*/
-		GdCheckCursor(dstpsd, srcx, srcy, srcx+srcw-1, srcy+srch-1);
-		dstpsd->StretchBlit(dstpsd, dstx, dsty, dstw, dsth,
-			srcpsd, srcx, srcy, srcw, srch, rop);
-		GdFixCursor(dstpsd);
-		return;
-
-	case CLIP_INVISIBLE:
-		return;
-	}
-
-	/* Partly clipped, we'll blit using destination clip
-	 * rectangles, and offset the blit accordingly.
-	 * Since the destination is already clipped, we
-	 * only need to clip the source here.
-	 */
-#if DYNAMICREGIONS
-	prc = clipregion->rects;
-	count = clipregion->numRects;
-#else
-	prc = cliprects;
-	count = clipcount;
-#endif
-	while(--count >= 0) {
-		int rx1, rx2, ry1, ry2;
-		int px1, px2, py1, py2;
-		int pw, ph;
-		int sx, sy, sw, sh;
-#if DYNAMICREGIONS
-		rx1 = prc->left;
-		ry1 = prc->top;
-		rx2 = prc->right;
-		ry2 = prc->bottom;
-#else
-		rx1 = prc->x;
-		ry1 = prc->y;
-		rx2 = prc->x + prc->width;
-		ry2 = prc->y + prc->height;
-#endif
-		/* Check:  does this rect intersect the one we want to draw? */
-		px1 = dstx;
-		py1 = dsty;
-		px2 = dstx + dstw;
-		py2 = dsty + dsth;
-		if (px1 < rx1) px1 = rx1;
-		if (py1 < ry1) py1 = ry1;
-		if (px2 > rx2) px2 = rx2;
-		if (py2 > ry2) py2 = ry2;
-
-		pw = px2 - px1;
-		ph = py2 - py1;
-		if(pw > 0 && ph > 0) {
-			/* calc proper src/dst offset for stretch rect*/
-g_row_inc = (srch << 16) / dsth;
-g_col_inc = (srcw << 16) / dstw;
-			sw = pw * srcw / dstw;
-			sh = ph * srch / dsth;
-
-			if (sw > 0 && sh > 0) {
-				sx = srcx + (px1-dstx) * srcw / dstw;
-				sy = srcy + (py1-dsty) * srch / dsth;
-/*printf("P %d,%d,%d,%d   %d,%d\n", sx, sy, sw, sh, g_row_inc, g_col_inc);*/
-
-				/* check cursor in dest and src regions*/
-				GdCheckCursor(dstpsd, px1, py1, px2-1, py2-1);
-				GdCheckCursor(dstpsd, srcx, srcy, srcx+srcw, srcy+srch);
-				dstpsd->StretchBlit(dstpsd, px1, py1, pw, ph, srcpsd,
-					sx, sy, sw, sh, rop);
-			}
-		}
-		++prc;
-	}
-	GdFixCursor(dstpsd);
-}
-
-/**
- * A proper stretch blit.  Supports flipping the image.
- * Paramaters are co-ordinates of two points in the source, and
- * two corresponding points in the destination.  The image is scaled
- * and flipped as needed to make the two points correspond.  The
- * top-left corner is drawn, the bottom right one isn't [i.e.
- * (0,0)-(2,2) specifies a 2x2 rectangle consisting of the points
- * at (0,0), (0,1), (1,0), (1,1).  It does not include the points
- * where x=2 or y=2.]
- *
- * Raster ops are not yet fully implemented - see the low-level
- * drivers for details.
- *
- * Note that we do not support overlapping blits.
- *
- * @param dstpsd Drawing surface to draw to.
- * @param d1_x Destination X co-ordinate of first corner.
- * @param d1_y Destination Y co-ordinate of first corner.
- * @param d2_x Destination X co-ordinate of second corner.
- * @param d2_y Destination Y co-ordinate of second corner.
- * @param srcpsd Drawing surface to copy from.
- * @param s1_x Source X co-ordinate of first corner.
- * @param s1_y Source Y co-ordinate of first corner.
- * @param s2_x Source X co-ordinate of second corner.
- * @param s2_y Source Y co-ordinate of second corner.
- * @param rop Raster operation.
- */
-void
-GdStretchBlitEx(PSD dstpsd, MWCOORD d1_x, MWCOORD d1_y, MWCOORD d2_x,
-	MWCOORD d2_y, PSD srcpsd, MWCOORD s1_x, MWCOORD s1_y, MWCOORD s2_x,
-	MWCOORD s2_y, long rop)
-{
-	/* Scale factors (as fractions, numerator/denominator) */
-	int src_x_step_numerator;
-	int src_x_step_denominator;
-	int src_y_step_numerator;
-	int src_y_step_denominator;
-
-	/* Clipped dest co-ords */
-	MWCOORD c1_x;
-	MWCOORD c1_y;
-	MWCOORD c2_x;
-	MWCOORD c2_y;
-
-	/* Initial source co-ordinates, as a fraction (denominators as above) */
-	int src_x_start_exact;
-	int src_y_start_exact;
-
-	/* Used by the clipping code. */
-#if DYNAMICREGIONS
-	int count;
-	MWRECT *prc;
-
-	extern MWCLIPREGION *clipregion;
-#else
-	int count;
-	MWCLIPRECT *prc;
-
-	extern MWCLIPRECT cliprects[];
-	extern int clipcount;
-#endif
-
-	assert(srcpsd);
-	assert(dstpsd);
-
-	/* DPRINTF("Nano-X: GdStretchBlitEx(dst=%x (%d,%d)-(%d,%d), src=%x (%d,%d)-(%d,%d), op=0x%lx\n",
-	           (int) dstpsd, (int) d1_x, (int) d1_y, (int) d2_x, (int) d2_y,
-	           (int) srcpsd, (int) s1_x, (int) s1_y, (int) s2_x, (int) s2_y, rop); */
-
-	/* Sort co-ordinates so d1 is top left, d2 is bottom right. */
-	if (d1_x > d2_x) {
-		register MWCOORD tmp;
-		tmp = d2_x;
-		d2_x = d1_x;
-		d1_x = tmp;
-		tmp = s2_x;
-		s2_x = s1_x;
-		s1_x = tmp;
-	}
-
-	if (d1_y > d2_y) {
-		register MWCOORD tmp;
-		tmp = d2_y;
-		d2_y = d1_y;
-		d1_y = tmp;
-		tmp = s2_y;
-		s2_y = s1_y;
-		s1_y = tmp;
-	}
-
-	if ((d2_x < 0)
-	    || (d2_y < 0)
-	    || (d1_x > dstpsd->xvirtres)
-	    || (d1_y > dstpsd->yvirtres)
-	    || (d1_x == d2_x)
-	    || (d1_y == d2_y)) {
-		/* Destination rectangle is entirely off screen,
-		 * or is zero-sized - bail ASAP
-		 */
-		/* DPRINTF("Nano-X: GdStretchBlitEx: CLIPPED OFF (dest rect offscreen or 0)\n"); */
-		return;
-	}
-
-	/* If we're not stretching or flipping, use the standard blit
-	 * (faster).
-	 */
-	if ((d2_x - d1_x == s2_x - s1_x) && (d2_y - d1_y == s2_y - s1_y)) {
-		GdBlit(dstpsd, d1_x, d1_y, d2_x - d1_x, d2_y - d1_y,
-		       srcpsd, s1_x, s1_y, rop);
-		return;
-	}
-
-	if (!dstpsd->StretchBlitEx) {
-		EPRINTF("GdStretchBlitEx NOT SUPPORTED on this target\n");
-		return;
-	}
-
-	/* Need to preserve original values, so make a copy we can clip. */
-	c1_x = d1_x;
-	c1_y = d1_y;
-	c2_x = d2_x;
-	c2_y = d2_y;
-
-	/* Calculate how far in source co-ordinates is
-	 * equivalent to one pixel in dest co-ordinates.
-	 * This is stored as a fraction (numerator/denominator).
-	 * The numerator may be > denominator.  The numerator
-	 * may be negative, the denominator is always positive.
-	 *
-	 * We need half this distance for some purposes,
-	 * hence the *2.
-	 *
-	 * The +1s are because we care about *sizes*, not
-	 * deltas.  (Without the +1s it just doesn't
-	 * work properly.)
-	 */
-	src_x_step_numerator = (s2_x - s1_x + 1) << 1;
-	src_x_step_denominator = (d2_x - d1_x + 1) << 1;
-	src_y_step_numerator = (s2_y - s1_y + 1) << 1;
-	src_y_step_denominator = (d2_y - d1_y + 1) << 1;
-
-	/* Clip the image so that the destination X co-ordinates
-	 * in c1_x and c2_x map to a point on the source image.
-	 */
-	if ((s1_x < 0) || (s1_x > srcpsd->xvirtres)
-	    || (s2_x < 0) || (s2_x > srcpsd->xvirtres)) {
-		/* Calculate where the left of the source image will end up,
-		 * in dest co-ordinates.
-		 */
-		int i1_x = d1_x - (s1_x * src_x_step_denominator) / src_x_step_numerator;
-
-		/* Calculate where the right of the source image will end up,
-		 * in dest co-ordinates.
-		 */
-		int i2_x = d1_x + ((srcpsd->xvirtres - s1_x) * src_x_step_denominator + src_x_step_denominator - 1) / src_x_step_numerator;
-
-		/* Since we may be doing a flip, "left" and "right" in the statements
-		 * above do not necessarily correspond to "left" and "right" in the
-		 * destination image, which is where we're clipping.  So sort the
-		 * X co-ordinates.
-		 */
-		if (i1_x > i2_x) {
-			register int temp;
-			temp = i1_x;
-			i1_x = i2_x;
-			i2_x = temp;
-		}
-
-		/* Check for total invisibility */
-		if ((c2_x < i1_x) || (c1_x > i2_x)) {
-			/* DPRINTF("Nano-X: GdStretchBlitEx: CLIPPED OFF (source X checks)\n"); */
-			return;
-		}
-
-		/* Perform partial clip */
-		if (c1_x < i1_x)
-			c1_x = i1_x;
-		if (c2_x > i2_x)
-			c2_x = i2_x;
-	}
-
-	/* Clip the image so that the destination Y co-ordinates
-	 * in c1_y and c2_y map to a point on the source image.
-	 */
-	if ((s1_y < 0) || (s1_y > srcpsd->yvirtres)
-	    || (s2_y < 0) || (s2_y > srcpsd->yvirtres)) {
-		/* Calculate where the top of the source image will end up,
-		 * in dest co-ordinates.
-		 */
-		int i1_y = d1_y - (s1_y * src_y_step_denominator) / src_y_step_numerator;
-
-		/* Calculate where the bottom of the source image will end up,
-		 * in dest co-ordinates.
-		 */
-		int i2_y = d1_y + ((srcpsd->yvirtres - s1_y) * src_y_step_denominator + src_y_step_denominator - 1) / src_y_step_numerator;
-
-		/* Since we may be doing a flip, "top" and bottom" in the statements
-		 * above do not necessarily correspond to "top" and bottom" in the
-		 * destination image, which is where we're clipping.  So sort the
-		 * Y co-ordinates.
-		 */
-		if (i1_y > i2_y) {
-			register int temp;
-			temp = i1_y;
-			i1_y = i2_y;
-			i2_y = temp;
-		}
-
-		/* Check for total invisibility */
-		if ((c2_y < i1_y) || (c1_y > i2_y)) {
-			/* DPRINTF("Nano-X: GdStretchBlitEx: CLIPPED OFF (source Y checks)\n"); */
-			return;
-		}
-
-		/* Perform partial clip */
-		if (c1_y < i1_y)
-			c1_y = i1_y;
-		if (c2_y > i2_y)
-			c2_y = i2_y;
-	}
-
-	/* Clip against dest window (NOT dest clipping region). */
-	if (c1_x < 0)
-		c1_x = 0;
-	if (c1_y < 0)
-		c1_y = 0;
-	if (c2_x > dstpsd->xvirtres)
-		c2_x = dstpsd->xvirtres;
-	if (c2_y > dstpsd->yvirtres)
-		c2_y = dstpsd->yvirtres;
-
-	/* Final fully-offscreen check */
-	if ((c1_x >= c2_x)
-	    || (c1_y >= c2_y)) {
-		/* DPRINTF("Nano-X: GdStretchBlitEx: CLIPPED OFF (final check)\n"); */
-		return;
-	}
-
-	/* Well, if we survived that lot, then we now have a destination
-	 * rectangle defined in (c1_x,c1_y)-(c2_x,c2_y).
-	 */
-
-	/* DPRINTF("Nano-X: GdStretchBlitEx: Clipped rect: (%d,%d)-(%d,%d)\n",
-	       (int) c1_x, (int) c1_y, (int) c2_x, (int) c2_y); */
-
-	/* Calculate the position in the source rectange that is equivalent
-	 * to the top-left of the destination rectangle.
-	 */
-	src_x_start_exact = s1_x * src_x_step_denominator
-		+ (c1_x - d1_x) * src_x_step_numerator;
-	src_y_start_exact = s1_y * src_y_step_denominator
-		+ (c1_y - d1_y) * src_y_step_numerator;
-
-	/* OK, clipping so far has been against physical bounds, we now have
-	 * to worry about user defined clip regions.
-	 */
-	switch (GdClipArea(dstpsd, c1_x, c1_y, c2_x - 1, c2_y - 1)) {
-	case CLIP_INVISIBLE:
-		/* DPRINTF("Nano-X: GdStretchBlitEx: CLIPPED OFF (GdClipArea check)\n"); */
-		return;
-	case CLIP_VISIBLE:
-		/* FIXME: check cursor in src region */
-		/* GdCheckCursor(srcpsd, c1_x, c1_y, c2_x-1, c2_y-1); */
-		/* DPRINTF("Nano-X: GdStretchBlitEx: no more clipping needed\n"); */
-		dstpsd->StretchBlitEx(dstpsd,
-					srcpsd,
-					c1_x,
-					c1_y,
-					c2_x - c1_x,
-					c2_y - c1_y,
-					src_x_step_denominator,
-					src_y_step_denominator,
-					src_x_start_exact,
-					src_y_start_exact,
-					src_x_step_numerator,
-					src_y_step_numerator, rop);
-		/* GdFixCursor(srcpsd); */
-		GdFixCursor(dstpsd);
-		return;
-
-	}
-	/* DPRINTF("Nano-X: GdStretchBlitEx: complex clipping needed\n"); */
-
-	/* FIXME: check cursor in src region */
-	/* GdCheckCursor(srcpsd, c1_x, c1_y, c2_x-1, c2_y-1); */
-
-
-	/* Partly clipped, we'll blit using destination clip
-	 * rectangles, and offset the blit accordingly.
-	 * Since the destination is already clipped, we
-	 * only need to clip the source here.
-	 */
-#if DYNAMICREGIONS
-	prc = clipregion->rects;
-	count = clipregion->numRects;
-#else
-	prc = cliprects;
-	count = clipcount;
-#endif
-	while (--count >= 0) {
-		int r1_x, r2_x, r1_y, r2_y;
-
-#if DYNAMICREGIONS
-		r1_x = prc->left;
-		r1_y = prc->top;
-		r2_x = prc->right;
-		r2_y = prc->bottom;
-#else
-		r1_x = prc->x;
-		r1_y = prc->y;
-		r2_x = prc->x + prc->width;
-		r2_y = prc->y + prc->height;
-#endif
-
-		/* Check:  does this rect intersect the one we want to draw? */
-		/* Clip r1-r2 so it's inside c1-c2 */
-		if (r1_x < c1_x)
-			r1_x = c1_x;
-		if (r1_y < c1_y)
-			r1_y = c1_y;
-		if (r2_x > c2_x)
-			r2_x = c2_x;
-		if (r2_y > c2_y)
-			r2_y = c2_y;
-
-		if ((r1_x < r2_x) && (r1_y < r2_y)) {
-			/* So we're drawing to:
-			 * destination rectangle (r1_x, r1_y) - (r2_x, r2_y)
-			 * source start co-ords:
-			 * x = src_x_start_exact + (r1_x - c1_x)*src_x_step_numerator
-			 * y = src_y_start_exact + (r1_y - c1_y)*src_y_step_numerator
-			 */
-
-			/* check cursor in dest region */
-			GdCheckCursor(dstpsd, r1_x, r1_y, r2_x - 1,
-					  r2_y - 1);
-			dstpsd->StretchBlitEx(dstpsd,
-						srcpsd,
-						r1_x,
-						r1_y,
-						r2_x - r1_x,
-						r2_y - r1_y,
-						src_x_step_denominator,
-						src_y_step_denominator,
-						src_x_start_exact + (r1_x - c1_x) * src_x_step_numerator,
-						src_y_start_exact + (r1_y - c1_y) * src_y_step_numerator,
-						src_x_step_numerator,
-						src_y_step_numerator,
-						rop);
-		}
-		++prc;
-	}
-	GdFixCursor(dstpsd);
-	/* GdFixCursor(srcpsd); */
-}
-
 /*
  * Calculate size and linelen of memory gc.
  * If bpp or planes is 0, use passed psd's bpp/planes.
@@ -2162,6 +1536,7 @@ GdCalcMemGCAlloc(PSD psd, unsigned int width, unsigned int height, int planes,
 			bytelen = width * 2;
 			break;
 		case 24:
+		case 18:
 			linelen = width;
 			bytelen = width * 3;
 			break;
@@ -2194,15 +1569,17 @@ GdCalcMemGCAlloc(PSD psd, unsigned int width, unsigned int height, int planes,
  * The pixels are packed according to inpixtype/outpixtype:
  *
  * pixtype		array of
- * MWPF_RGB		MWCOLORVAL (unsigned long)
+ * MWPF_RGB		MWCOLORVAL (uint32_t)
  * MWPF_PIXELVAL	MWPIXELVAL (compile-time dependent)
  * MWPF_PALETTE		unsigned char
- * MWPF_TRUECOLOR8888	unsigned long
- * MWPF_TRUECOLOR0888	unsigned long
+ * MWPF_TRUECOLOR8888	uint32_t
+ * MWPF_TRUECOLORABGR	uint32_t
+ * MWPF_TRUECOLOR0888	uint32_t
  * MWPF_TRUECOLOR888	packed struct {char r,char g,char b} (24 bits)
  * MWPF_TRUECOLOR565	unsigned short
  * MWPF_TRUECOLOR555	unsigned short
  * MWPF_TRUECOLOR332	unsigned char
+ * MWPF_TRUECOLOR233	unsigned char
  *
  * @param width Width of rectangle to translate.
  * @param height Height of rectangle to translate.
@@ -2219,7 +1596,7 @@ GdTranslateArea(MWCOORD width, MWCOORD height, void *in, int inpixtype,
 {
 	unsigned char *	inbuf = in;
 	unsigned char *	outbuf = out;
-	unsigned long	pixelval;
+	uint32_t	pixelval;
 	MWCOLORVAL	colorval;
 	MWCOORD		x, y;
 	unsigned char 	r, g, b;
@@ -2252,15 +1629,24 @@ GdTranslateArea(MWCOORD width, MWCOORD height, void *in, int inpixtype,
 			pixelval = *inbuf++;
 			colorval = PIXEL332TOCOLORVAL(pixelval);
 			break;
+		case MWPF_TRUECOLOR233:
+			pixelval = *inbuf++;
+			colorval = PIXEL233TOCOLORVAL(pixelval);
+			break;
 		case MWPF_TRUECOLOR0888:
-			pixelval = *(unsigned long *)inbuf;
+			pixelval = *(uint32_t *)inbuf;
 			colorval = PIXEL888TOCOLORVAL(pixelval);
-			inbuf += sizeof(unsigned long);
+			inbuf += sizeof(uint32_t);
+			break;
+		case MWPF_TRUECOLORABGR:
+			pixelval = *(uint32_t *)inbuf;
+			colorval = PIXELABGRTOCOLORVAL(pixelval);
+			inbuf += sizeof(uint32_t);
 			break;
 		case MWPF_TRUECOLOR8888:
-			pixelval = *(unsigned long *) inbuf;
+			pixelval = *(uint32_t *)inbuf;
 			colorval = PIXEL8888TOCOLORVAL(pixelval);
-			inbuf += sizeof(unsigned long);
+			inbuf += sizeof(uint32_t);
 			break;
 		case MWPF_TRUECOLOR888:
 			r = *inbuf++;
@@ -2305,14 +1691,20 @@ GdTranslateArea(MWCOORD width, MWCOORD height, void *in, int inpixtype,
 		case MWPF_TRUECOLOR332:
 			*outbuf++ = COLOR2PIXEL332(colorval);
 			break;
+		case MWPF_TRUECOLOR233:
+			*outbuf++ = COLOR2PIXEL233(colorval);
+			break;
 		case MWPF_TRUECOLOR0888:
-			*(unsigned long *)outbuf = COLOR2PIXEL888(colorval);
-			outbuf += sizeof(unsigned long);
+			*(uint32_t *)outbuf = COLOR2PIXEL888(colorval);
+			outbuf += sizeof(uint32_t);
 			break;
 		case MWPF_TRUECOLOR8888:
-			*(unsigned long *) outbuf =
-				COLOR2PIXEL8888(colorval);
-			outbuf += sizeof(unsigned long);
+			*(uint32_t *)outbuf = COLOR2PIXEL8888(colorval);
+			outbuf += sizeof(uint32_t);
+			break;
+		case MWPF_TRUECOLORABGR:
+			*(uint32_t *)outbuf = COLOR2PIXELABGR(colorval);
+			outbuf += sizeof(uint32_t);
 			break;
 		case MWPF_TRUECOLOR888:
 			*outbuf++ = REDVALUE(colorval);

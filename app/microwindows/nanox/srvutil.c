@@ -1,9 +1,7 @@
 /*
- * Copyright (c) 2000, 2002 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000, 2002, 2010 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Graphics server utility routines for windows.
  */
@@ -198,6 +196,7 @@ wp->id, wp->mapped, wp->realized, wp->parent->realized);*/
 
 	/* set window visible flag*/
 	wp->realized = GR_TRUE;
+
 	if (!temp) {
 		GsCheckMouseWindow();
 		GsCheckFocusWindow();
@@ -251,6 +250,7 @@ GsWpDestroyWindow(GR_WINDOW *wp)
 		selection_owner.wid = 0;
 		if(selection_owner.typelist)
 			free(selection_owner.typelist);
+		selection_owner.typelist = NULL;
 		GsDeliverSelectionChangedEvent(oldwid, 0);
 	}
 
@@ -408,11 +408,13 @@ GsWpDrawBackgroundPixmap(GR_WINDOW *wp, GR_PIXMAP *pm, GR_COORD x,
 
 	if(destwidth > 0 && destheight > 0) {
 		if (wp->bgpixmapflags & GR_BACKGROUND_STRETCH) {
-			GdStretchBlit(wp->psd, destx + wp->x, desty + wp->y,
-				destwidth, destheight, pm->psd, fromx, fromy,
-				pm->width, pm->height, MWROP_COPY);
-		} else GdBlit(wp->psd, destx + wp->x, desty + wp->y, destwidth,
-			destheight, pm->psd, fromx, fromy, MWROP_COPY);
+			GdStretchBlitEx(wp->psd, destx + wp->x, desty + wp->y,
+				destx + wp->x + destwidth - 0, desty + wp->y + destheight - 0,
+				pm->psd, fromx, fromy,
+				fromx + pm->width - 1, fromy + pm->height - 1,
+				MWROP_COPY);
+		} else GdBlit(wp->psd, destx + wp->x, desty + wp->y, (width < destwidth)?width:destwidth,
+			(height < destheight)?height:destheight, pm->psd, fromx, fromy, MWROP_COPY);
 	}
 
 	if(wp->bgpixmapflags & (GR_BACKGROUND_TRANS|GR_BACKGROUND_STRETCH))
@@ -957,13 +959,21 @@ GsPrepareDrawing(GR_DRAW_ID id, GR_GC_ID gcid, GR_DRAWABLE **retdp)
 		          return GR_DRAW_TYPE_NONE;
 	   
 #if DYNAMICREGIONS
-		reg = GdAllocRectRegion(0, 0, pp->psd->xvirtres,
-			pp->psd->yvirtres);
+		reg = GdAllocRectRegion(0, 0, pp->psd->xvirtres, pp->psd->yvirtres);
 		/* intersect with user region if any*/
 		if (gcp->regionid) {
 			regionp = GsFindRegion(gcp->regionid);
-			if (regionp)
-				GdIntersectRegion(reg, reg, regionp->rgn);
+			if (regionp) {
+				/* handle pixmap offsets*/
+				if (gcp->xoff || gcp->yoff) {
+					MWCLIPREGION *local = GdAllocRegion();
+					GdCopyRegion(local, regionp->rgn);
+					GdOffsetRegion(local, gcp->xoff, gcp->yoff);
+					GdIntersectRegion(reg, reg, local);
+					GdDestroyRegion(local);
+				} else
+					GdIntersectRegion(reg, reg, regionp->rgn);
+			}
 		}
 		GdSetClipRegion(pp->psd, reg);
 #else
@@ -1025,7 +1035,7 @@ GsPrepareDrawing(GR_DRAW_ID id, GR_GC_ID gcid, GR_DRAWABLE **retdp)
 	 */
 	if (gcp->changed) {
 		PSD		psd = (wp ? wp->psd : pp->psd);
-		unsigned long	mask;
+		uint32_t	mask;
 		int		count;
 
 		if (gcp->linestyle == GR_LINE_SOLID) {
@@ -1143,7 +1153,7 @@ void
 GsCheckCursor(void)
 {
 	GR_WINDOW	*wp;		/* window cursor is in */
-	GR_CURSOR	*cp;		/* cursor definition */
+	GR_CURSOR	*cp = NULL;	/* cursor definition */
 
 	/*
 	 * Get the cursor at its current position, and if it is not the
@@ -1154,7 +1164,16 @@ GsCheckCursor(void)
 	if (wp == NULL)
 		wp = mousewp;
 
-	cp = GsFindCursor(wp->cursorid);
+	/* Inherit cursur from parent window(s) if possible*/
+	while (wp) {
+		if (wp->cursorid) {
+			cp = GsFindCursor(wp->cursorid);
+			if (cp)
+				break;
+		}
+		wp = wp->parent;
+	}
+
 	if (!cp)
 		cp = stdcursor;
 	if (cp == curcursor)
@@ -1177,6 +1196,22 @@ GsCheckCursor(void)
 void
 GsCheckMouseWindow(void)
 {
+#if 1
+	GR_WINDOW *oldwp, *newwp;
+
+	oldwp = grabbuttonwp;
+	if (!oldwp)
+		oldwp = mousewp;
+
+	newwp = GsFindVisibleWindow(cursorx, cursory);
+	if (oldwp != newwp) {
+		GsDeliverGeneralEvent(oldwp, GR_EVENT_TYPE_MOUSE_EXIT, NULL);
+		GsDeliverGeneralEvent(newwp, GR_EVENT_TYPE_MOUSE_ENTER, NULL);
+	}
+
+	mousewp = newwp;
+#endif
+#if 0
 	GR_WINDOW	*wp;		/* newest window for mouse */
 
 	wp = grabbuttonwp;
@@ -1190,6 +1225,7 @@ GsCheckMouseWindow(void)
 	mousewp = wp;
 
 	GsDeliverGeneralEvent(wp, GR_EVENT_TYPE_MOUSE_ENTER, NULL);
+#endif
 }
 
 /*

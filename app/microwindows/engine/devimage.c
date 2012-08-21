@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2001, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000, 2001, 2003, 2005 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2000 Martin Jolicoeur <martinj@visuaide.com>
  * Portions Copyright (c) 2000 Alex Holden <alex@linuxhacker.org>
  *
@@ -14,12 +14,11 @@
  *
  * WARNING: GIF decoder and stretchimage routine are licensed under GPL only!
  */
-
 #include "portunixstd.h"
 #include "memory.h"
 
 #include "device.h"
-
+#include "swap.h"
 #if HAVE_MMAP
 #include <sys/mman.h>
 #endif
@@ -74,7 +73,7 @@ GdImageBufferRead(buffer_t *buffer, void *dest, unsigned long size)
 	unsigned long copysize;
 
 	if (buffer->offset == buffer->size)
-		return EOF;	// EOF
+		return 0;	/* EOF*/
 
 	if (buffer->offset + size > buffer->size) 
 		copysize = buffer->size - buffer->offset;
@@ -90,7 +89,7 @@ int
 GdImageBufferGetChar(buffer_t *buffer)
 {
 	if (buffer->offset == buffer->size) 
-		return EOF; //EOF
+		return EOF;
 	return buffer->start[buffer->offset++];
 }
  
@@ -213,8 +212,8 @@ GdLoadImageFromFile(PSD psd, char *path, int flags)
 	void *buffer = 0;
 	buffer_t src;
   
-	fd = syscall_file_open(path, O_RDONLY);
-	if (fd < 0 ) {
+	fd = syscall_file_open(path, O_RDONLY);;
+	if (fd < 0) {
 		EPRINTF("GdLoadImageFromFile: can't open image: %s\n", path);
 		return 0;
 	}
@@ -228,7 +227,7 @@ GdLoadImageFromFile(PSD psd, char *path, int flags)
 	buffer = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (!buffer) {
 		EPRINTF("GdLoadImageFromFile: Couldn't map image %s\n", path);
-		close(fd);
+		syscall_file_close(fd);
 		return 0;
 	}
 #else
@@ -250,7 +249,7 @@ GdLoadImageFromFile(PSD psd, char *path, int flags)
 	id = GdDecodeImage(psd, &src, path, flags);
 
 #if HAVE_MMAP
-	munmap(buffer, s.st_size);
+	munmap(buffer, size);
 #else
 	free(buffer);
 #endif
@@ -281,7 +280,7 @@ GdDecodeImage(PSD psd, buffer_t * src, char *path, int flags)
 	}
 	pimage->imagebits = NULL;
 	pimage->palette = NULL;
-	pimage->transcolor = -1L;
+	pimage->transcolor = MWNOCOLOR;
 
 #if defined(HAVE_TIFF_SUPPORT)
 	/* must be first... no buffer support yet*/
@@ -418,6 +417,82 @@ GdDrawImageToFit(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
 
 		/* Stretch full source to destination rectangle*/
 		GdStretchImage(pimage, NULL, &image2, &rcDst);
+		GdDrawImage(psd, x, y, &image2);
+		free(image2.imagebits);
+	} else
+		GdDrawImage(psd, x, y, pimage);
+}
+
+/**
+ * Draw part of the image.
+ *
+ * @param psd Drawing surface.
+ * @param x X destination co-ordinate.
+ * @param y Y destination co-ordinate.
+ * @param width If >=0, the image will be scaled to this width.
+ * If <0, the image will not be scaled horiziontally.
+ * @param height If >=0, the image will be scaled to this height.
+ * If <0, the image will not be scaled vertically.
+ * @param sx source X co-ordinate.
+ * @param sy source Y co-ordinate.
+ * @param swidth source width.
+ * @param sheight source height.
+ * @param id Image to draw.
+ */
+void
+GdDrawImagePartToFit(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
+								MWCOORD sx, MWCOORD sy, MWCOORD swidth, MWCOORD sheight,
+	int id)
+{
+	PIMAGEITEM	pItem;
+	PMWIMAGEHDR	pimage;
+
+	pItem = findimage(id);
+	if (!pItem)
+		return;
+	pimage = pItem->pimage;
+
+	/*
+	 * Display image, possibly stretch/shrink to resize
+	 */
+	if (height < 0)
+		height = pimage->height;
+	if (width < 0)
+		width = pimage->width;
+
+	if (height != pimage->height || width != pimage->width) {
+		MWCLIPRECT	rcDst,rcSrc;
+		MWIMAGEHDR	image2;
+
+		/* create similar image, different width/height*/
+
+		image2.width = width;
+		image2.height = height;
+		image2.planes = pimage->planes;
+		image2.bpp = pimage->bpp;
+		GdComputeImagePitch(pimage->bpp, width, &image2.pitch,
+			&image2.bytesperpixel);
+		image2.compression = pimage->compression;
+		image2.palsize = pimage->palsize;
+		image2.palette = pimage->palette;	/* already allocated*/
+		image2.transcolor = pimage->transcolor;
+		if( (image2.imagebits = malloc(image2.pitch*height)) == NULL) {
+			EPRINTF("GdDrawImageToFit: no memory\n");
+			return;
+		}
+
+		rcDst.x = 0;
+		rcDst.y = 0;
+		rcDst.width = width;
+		rcDst.height = height;
+
+		rcSrc.x = sx;
+		rcSrc.y = sy;
+		rcSrc.width = swidth;
+		rcSrc.height = sheight;
+
+		/* Stretch full source to destination rectangle*/
+		GdStretchImage(pimage, &rcSrc, &image2, &rcDst);
 		GdDrawImage(psd, x, y, &image2);
 		free(image2.imagebits);
 	} else

@@ -1,37 +1,42 @@
 /* 
  * Loadable FNT font engine for Microwindows
- * Copyright (c) 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2003, 2005, 2010 Greg Haerr <greg@censoft.com>
  *
- * Load a .fnt (Microwindows native) binary font, store in incore format.
+ * Load a .fnt/.fnt.gz (Microwindows native) binary font, store in incore format.
  */
-/* #include "swap.h"*/
-#include "memory.h"
+#include <stdio.h>
+#include <string.h>
 #include "device.h"
 #include "devfont.h"
-#include "../drivers/genfont.h"
+#include "genfont.h"
+
+/* configurable defaults*/
+#ifndef FNT_FONT_DIR
+#define FNT_FONT_DIR	"fonts/fnt"		/* default .fnt file location*/
+#endif
 
 /*
  * .fnt loadable font file format definition
  *
  * format                     len	description
  * -------------------------  ----	------------------------------
- * UCHAR version[4]		4	magic number and version bytes
- * UCHAR name[64]	       64	font name, space padded
+ * UCHAR version[4]				4	magic number and version bytes
+ * UCHAR name[64]	       		64	font name, space padded
  * UCHAR copyright[256]	      256	copyright info, space padded
- * USHORT maxwidth		2	font max width in pixels
- * USHORT height		2	font height in pixels
- * USHORT ascent		2	font ascent (baseline) in pixels
+ * USHORT maxwidth				2	font max width in pixels
+ * USHORT height				2	font height in pixels
+ * USHORT ascent				2	font ascent (baseline) in pixels
  * USHORT pad                   2       unused, pad to 32-bit boundary
- * ULONG firstchar		4	first character code in font
- * ULONG defaultchar		4	default character code in font
- * ULONG size			4	# characters in font
- * ULONG nbits			4	# words imagebits data in file
- * ULONG noffset		4	# longs offset data in file
- * ULONG nwidth			4	# bytes width data in file
- * MWIMAGEBITS bits	  nbits*2	image bits variable data
+ * ULONG firstchar				4	first character code in font
+ * ULONG defaultchar			4	default character code in font
+ * ULONG size					4	# characters in font
+ * ULONG nbits					4	# words imagebits data in file
+ * ULONG noffset				4	# longs offset data in file
+ * ULONG nwidth					4	# bytes width data in file
+ * MWIMAGEBITS bits	  			nbits*2	image bits variable data
  * [MWIMAGEBITS padded to 32-bit boundary]
- * ULONG offset         noffset*4	offset variable data
- * UCHAR width		 nwidth*1	width variable data
+ * ULONG offset         		noffset*4	offset variable data
+ * UCHAR width		 			nwidth*1	width variable data
  */
 
 /* loadable font magic and version #*/
@@ -40,7 +45,7 @@
 /* The user hase the option including ZLIB and being able to    */
 /* directly read compressed .fnt files, or to omit it and save  */
 /* space.  The following defines make life much easier          */
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 #include <zlib.h>
 #define FILEP gzFile
 #define FOPEN(path, mode)           gzopen(path, mode)
@@ -56,26 +61,37 @@
 #endif
 
 /* Handling routines for FNT fonts, use MWCOREFONT structure */
+PMWFONT fnt_createfont(const char *name, MWCOORD height, MWCOORD width, int attr);
 static void fnt_unloadfont(PMWFONT font);
 static PMWCFONT fnt_load_font(const char *path);
 
 /* these procs used when font ASCII indexed*/
-static MWFONTPROCS fnt_fontprocs = {
+MWFONTPROCS fnt_fontprocs = {
+	0,				/* can't scale*/
 	MWTF_ASCII,		/* routines expect ascii */
+	NULL,			/* init*/
+	fnt_createfont,
 	gen_getfontinfo,
 	gen_gettextsize,
 	gen_gettextbits,
 	fnt_unloadfont,
+#if STANDALONE
+	gen16_drawtext, //FIXME
+#else
 	corefont_drawtext,
+#endif
 	NULL,			/* setfontsize */
 	NULL,			/* setfontrotation */
 	NULL,			/* setfontattr */
-	NULL,			/* duplicate not supported */
+	NULL			/* duplicate not supported */
 };
 
 /* these procs used when font requires UC16 index*/
 static MWFONTPROCS fnt_fontprocs16 = {
+	0,				/* can't scale*/
 	MWTF_UC16,		/* large font, expect UC16*/
+	NULL,			/* init*/
+	fnt_createfont,
 	gen_getfontinfo,
 	gen16_gettextsize,
 	gen_gettextbits,
@@ -84,11 +100,12 @@ static MWFONTPROCS fnt_fontprocs16 = {
 	NULL,			/* setfontsize */
 	NULL,			/* setfontrotation */
 	NULL,			/* setfontattr */
-	NULL,			/* duplicate not supported */
+	NULL			/* duplicate not supported */
 };
 
-PMWCOREFONT
-fnt_createfont(const char *name, MWCOORD height, int attr)
+/* load font and allocate MWCOREFONT structure*/
+PMWFONT
+fnt_createfont(const char *name, MWCOORD height, MWCOORD width, int attr)
 {
 	PMWCOREFONT	pf;
 	PMWCFONT	cfont;
@@ -105,14 +122,13 @@ fnt_createfont(const char *name, MWCOORD height, int attr)
 	}
 
 	/* determine if unicode-16 indexing required*/
-	uc16 = cfont->firstchar > 255 || 
-		(cfont->firstchar + cfont->size) > 255;
+	uc16 = cfont->firstchar > 255 || (cfont->firstchar + cfont->size) > 255;
 	pf->fontprocs = uc16? &fnt_fontprocs16: &fnt_fontprocs;
 
 	pf->fontsize = pf->fontrotation = pf->fontattr = 0;
 	pf->name = "FNT";
 	pf->cfont = cfont;
-	return pf;
+	return (PMWFONT)pf;
 }
 
 void
@@ -123,11 +139,11 @@ fnt_unloadfont(PMWFONT font)
 
 	if (pfc) {
 		if (pfc->width)
-			free(pf->cfont->width);
+			free((char *)pf->cfont->width);
 		if (pfc->offset)
-			free(pf->cfont->offset);
+			free((char *)pf->cfont->offset);
 		if (pfc->bits)
-			free(pf->cfont->bits);
+			free((char *)pf->cfont->bits);
 		if (pfc->name)
 			free(pf->cfont->name);
 
@@ -140,7 +156,7 @@ fnt_unloadfont(PMWFONT font)
 static int
 READBYTE(FILEP fp, unsigned char *cp)
 {
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 	unsigned char buf[1];
 
 	if (FREAD(fp, buf, 1) != 1)
@@ -159,7 +175,7 @@ READBYTE(FILEP fp, unsigned char *cp)
 static int
 READSHORT(FILEP fp, unsigned short *sp)
 {
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 	unsigned char buf[2];
 
 	if (FREAD(fp, buf, 2) != 2)
@@ -180,9 +196,9 @@ READSHORT(FILEP fp, unsigned short *sp)
 }
 
 static int
-READLONG(FILEP fp, unsigned long *lp)
+READLONG(FILEP fp, uint32_t *lp)
 {
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 	unsigned char buf[4];
 
 	if (FREAD(fp, buf, 4) != 4)
@@ -190,7 +206,7 @@ READLONG(FILEP fp, unsigned long *lp)
 	*lp = buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
 #else
 	int c;
-	unsigned long l;
+	uint32_t l;
 
 	if ((c = getc(fp)) == EOF)
 		return 0;
@@ -239,18 +255,16 @@ fnt_load_font(const char *path)
 	PMWCFONT pf = NULL;
 	int i;
 	unsigned short maxwidth, height, ascent, pad;
-	unsigned long firstchar, defaultchar, size;
-	unsigned long nbits, noffset, nwidth;
+	uint32_t firstchar, defaultchar, size;
+	uint32_t nbits, noffset, nwidth;
 	char version[4+1];
 	char name[64+1];
 	char copyright[256+1];
 	char fname[256];
 
 	ifp = FOPEN(path, "rb");
-
 	if (!ifp) {
-		strcpy(fname, FNT_FONT_DIR "/");
-		strcpy(fname + sizeof(FNT_FONT_DIR), path);
+		sprintf(fname, "%s/%s", FNT_FONT_DIR, path);
 		ifp = FOPEN(fname, "rb");
 		
 		/* Try to grab it from the MWFONTDIR directory */
@@ -259,7 +273,7 @@ fnt_load_font(const char *path)
 			if (env) {
 				sprintf(fname, "%s/%s", env, path);
 				
-				printf("Trying to get font from %s\n", fname);
+				DPRINTF("Trying to get font from %s\n", fname);
 				ifp = FOPEN(fname, "rb");
 			}
 		}
@@ -269,7 +283,6 @@ fnt_load_font(const char *path)
 		return NULL;
 
 	/* read magic and version #*/
-	memset(version, 0, sizeof(version));
 	if (READSTR(ifp, version, 4) != 4)
 		goto errout;
 	if (strcmp(version, VERSION) != 0)
@@ -286,7 +299,6 @@ fnt_load_font(const char *path)
 	if (!pf->name)
 		goto errout;
 	strcpy(pf->name, name);
-
 	/* copyright, not currently stored*/
 	if (READSTRPAD(ifp, copyright, 256) != 256)
 		goto errout;
@@ -326,7 +338,7 @@ fnt_load_font(const char *path)
 	if (!READLONG(ifp, &noffset))
 		goto errout;
 	if (noffset) {
-		pf->offset = (unsigned long *)malloc(noffset * sizeof(unsigned long));
+		pf->offset = (uint32_t *)malloc(noffset * sizeof(uint32_t));
 		if (!pf->offset)
 			goto errout;
 	}
@@ -342,19 +354,21 @@ fnt_load_font(const char *path)
 
 	/* variable font data*/
 	for (i=0; i<nbits; ++i)
-		if (!READSHORT(ifp, &pf->bits[i]))
+		if (!READSHORT(ifp, (unsigned short *)&pf->bits[i]))
 			goto errout;
+
 	/* pad to longword boundary*/
-	if (ftell(ifp) & 02)
-		if (!READSHORT(ifp, &pf->bits[i]))
+	if (nbits & 01)
+		if (!READSHORT(ifp, &pad))
 			goto errout;
+
 	if (noffset)
 		for (i=0; i<pf->size; ++i)
-			if (!READLONG(ifp, &pf->offset[i]))
+			if (!READLONG(ifp, (uint32_t *)&pf->offset[i]))
 				goto errout;
 	if (nwidth)
 		for (i=0; i<pf->size; ++i)
-			if (!READBYTE(ifp, &pf->width[i]))
+			if (!READBYTE(ifp, (unsigned char *)&pf->width[i]))
 				goto errout;
 	
 	FCLOSE(ifp);
@@ -367,11 +381,11 @@ errout:
 	if (pf->name)
 		free(pf->name);
 	if (pf->bits)
-		free(pf->bits);
+		free((char *)pf->bits);
 	if (pf->offset)
-		free(pf->offset);
+		free((char *)pf->offset);
 	if (pf->width)
-		free(pf->width);
+		free((char *)pf->width);
 	free(pf);
 	return NULL;
 }

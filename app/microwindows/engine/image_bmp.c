@@ -1,14 +1,14 @@
 /*
- * Copyright (c) 2000, 2001, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000, 2001, 2003, 2005 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2000 Martin Jolicoeur <martinj@visuaide.com>
  *
  * Image decode routine for BMP files
  */
 #include "portunixstd.h"
 #include "memory.h"
-#include "swap.h"
 
 #include "device.h"
+#include "swap.h"
 
 #if MW_FEATURE_IMAGES && defined(HAVE_BMP_SUPPORT)
 
@@ -20,7 +20,7 @@
 
 typedef unsigned char	BYTE;
 typedef unsigned short	WORD;
-typedef unsigned long	DWORD;
+typedef uint32_t	DWORD;
 typedef long		LONG;
 
 typedef struct {
@@ -159,9 +159,17 @@ GdDecodeBMP(buffer_t *src, PMWIMAGEHDR pimage)
 	pimage->compression = MWIMAGE_BGR;	/* right side up, BGR order*/
 	pimage->planes = 1;
 
-	/* currently only 1, 4, 8 and 24 bpp bitmaps*/
-	if(pimage->bpp > 8 && pimage->bpp != 24) {
-		EPRINTF("GdDecodeBMP: image bpp not 1, 4, 8 or 24\n");
+	/* only 1, 4, 8, 16, 24 and 32 bpp bitmaps*/
+	switch(pimage->bpp) {
+	case 1:
+	case 4:
+	case 8:
+	case 16:
+	case 24:
+	case 32:
+		break;
+	default:
+		EPRINTF("GdDecodeBMP: image bpp not 1, 4, 8, 16, 24 or 32\n");
 		return 2;	/* image loading error*/
 	}
 
@@ -185,6 +193,26 @@ GdDecodeBMP(buffer_t *src, PMWIMAGEHDR pimage)
 				GdImageBufferGetChar(src);
 		}
 	}
+
+	/* determine 16bpp 5/5/5 or 5/6/5 format*/
+	if (pimage->bpp == 16) {
+		uint32_t format = 0x7c00;		/* default is 5/5/5*/
+
+		if (compression == BI_BITFIELDS) {
+			MWUCHAR	buf[4];
+
+			if (GdImageBufferRead(src, &buf, sizeof(DWORD)) != sizeof(DWORD))
+				goto err;
+			format = dwswap(dwread(buf));
+		}
+		if (format == 0x7c00)
+			pimage->compression |= MWIMAGE_555;
+		/* else it's 5/6/5 format, no flag required*/
+	}
+
+//	printf("BMP format %d bpp", pimage->bpp);
+//	if (pimage->compression & MWIMAGE_555) printf(" 5/5/5");
+//	printf("\n");
 
 	/* decode image data*/
 	GdImageBufferSeekTo(src, bmpf.bfOffBits);

@@ -16,7 +16,7 @@ STARTOBJ=$(STDLIBDIR)/startappl.o
 APPLIB=$(STDLIBDIR)/libappl.a
 MICROWINLIB=$(MICROWINDIR)/lib/libmwnanox.a
 
-OBJS= nanowm.o actions.o clients.o events.o wlist.o
+OBJS= nanowm.o wmaction.o wmclients.o wmevents.o wmutil.o
 
 all: nanowm.out
 

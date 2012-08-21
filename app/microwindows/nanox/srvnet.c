@@ -1,13 +1,10 @@
 /*
- * Copyright (c) 1999-2001, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999-2001, 2003, 2010 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002, 2003 by Koninklijke Philips Electronics N.V.
  * Copyright (c) 1999 Alex Holden <alex@linuxhacker.org>
  * Copyright (c) 2000 Vidar Hokstad
  * Copyright (c) 2000 Morten Rolland <mortenro@screenmedia.no>
  * Portions Copyright (c) 1991 David I. Bell
- *
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Completely rewritten for speed by Greg Haerr
  *
@@ -19,8 +16,14 @@
 #include "memory.h"
 #include "bucket.h"
 
+
 #include "serv.h"
 #include "nxproto.h"
+
+/* fix bad MIPS sys headers...*/
+#ifndef SOCK_STREAM
+#define SOCK_STREAM	2	/* <asm/socket.h>*/
+#endif
 
 extern	int		un_sock;
 extern	GR_CLIENT	*root_client;
@@ -755,14 +758,14 @@ GrSetGCTSOffsetWrapper(void *r)
 }
 
 static void
-GrCreateFontWrapper(void *r)
+GrCreateFontExWrapper(void *r)
 {
-	nxCreateFontReq *req = r;
+	nxCreateFontExReq *req = r;
 	GR_FONT_ID 	fontid;
 
-	fontid = GrCreateFont(GetReqData(req), req->height, NULL);
+	fontid = GrCreateFontEx(GetReqData(req), req->height, req->width, NULL);
 
-	GsWriteType(current_fd,GrNumCreateFont);
+	GsWriteType(current_fd, GrNumCreateFontEx);
 	GsWrite(current_fd, &fontid, sizeof(fontid));
 }
 
@@ -772,18 +775,18 @@ GrCreateLogFontWrapper(void *r)
 	nxCreateLogFontReq *req = r;
 	GR_FONT_ID fontid;
 
-	fontid = GrCreateFont(NULL, 0, &req->lf);
+	fontid = GrCreateFontEx(NULL, 0, 0, &req->lf);
 
 	GsWriteType(current_fd, GrNumCreateLogFont);
 	GsWrite(current_fd, &fontid, sizeof(fontid));
 }
 
 static void
-GrSetFontSizeWrapper(void *r)
+GrSetFontSizeExWrapper(void *r)
 {
-	nxSetFontSizeReq *req = r;
+	nxSetFontSizeExReq *req = r;
 
- 	GrSetFontSize(req->fontid, req->fontsize);
+ 	GrSetFontSizeEx(req->fontid, req->height, req->width);
 }
 
 static void
@@ -1022,7 +1025,7 @@ GrGetWMPropertiesWrapper(void *r)
 	GrGetWMProperties(req->windowid, &props);
 
 	if(props.title)
-		textlen = strlen((char *)props.title) + 1;
+		textlen = strlen((const char *)props.title) + 1;
 	else textlen = 0;
 
 	GsWriteType(current_fd,GrNumGetWMProperties);
@@ -1030,6 +1033,8 @@ GrGetWMPropertiesWrapper(void *r)
 	GsWrite(current_fd, &textlen, sizeof(textlen));
 	if(textlen)
 		GsWrite(current_fd, props.title, textlen);
+	if(props.title)
+		free(props.title);
 }
 
 static void
@@ -1084,6 +1089,16 @@ GrDrawImageToFitWrapper(void *r)
 }
 
 static void
+GrDrawImagePartToFitWrapper(void *r)
+{
+	nxDrawImagePartToFitReq *req = r;
+
+	GrDrawImagePartToFit(req->drawid, req->gcid, req->dx, req->dy, req->dwidth,
+		req->dheight,req->sx, req->sy, req->swidth,
+		req->sheight, req->imageid);
+}
+
+static void
 GrFreeImageWrapper(void *r)
 {
 	nxFreeImageReq *req = r;
@@ -1103,6 +1118,7 @@ GrGetImageInfoWrapper(void *r)
 }
 #else /* if ! MW_FEATURE_IMAGES */
 #define GrDrawImageToFitWrapper GrNotImplementedWrapper
+#define GrDrawImagePartToFitWrapper GrNotImplementedWrapper
 #define GrFreeImageWrapper GrNotImplementedWrapper
 #define GrGetImageInfoWrapper GrNotImplementedWrapper
 #endif
@@ -1135,7 +1151,7 @@ GrGetSelectionOwnerWrapper(void *r)
 	GsWrite(current_fd, &wid, sizeof(wid));
 
 	if(wid) {
-		len = strlen((char *)typelist) + 1;
+		len = strlen((const char *)typelist) + 1;
 		GsWrite(current_fd, &len, sizeof(len));
 		GsWrite(current_fd, typelist, len);
 	}
@@ -1551,7 +1567,7 @@ GrCreateFontFromBufferWrapper(void *r)
 		result = 0;
 	} else {
 		result = GrCreateFontFromBuffer(buffer->data, buffer->size,
-			(const char *)req->format, req->height);
+			(const char *)req->format, req->height, req->width);
 		
 		freeImageBuffer(buffer);
 	}
@@ -1566,7 +1582,7 @@ GrCopyFontWrapper(void *r)
 {
 #if HAVE_FREETYPE_2_SUPPORT
 	nxCopyFontReq *req = r;
-	GR_FONT_ID result = GrCopyFont(req->fontid, req->height);
+	GR_FONT_ID result = GrCopyFont(req->fontid, req->height, req->width);
 
 	GsWriteType(current_fd, GrNumCopyFont);
 	GsWrite(current_fd, &result, sizeof(result));
@@ -1582,7 +1598,8 @@ void GrShmCmdsFlushWrapper(void *r);
 struct GrFunction {
 	void		(*func)(void *);
 	GR_FUNC_NAME 	name;
-} GrFunctions[] = {
+};
+static const struct GrFunction GrFunctions[] = {
 	/*   0 */ {GrOpenWrapper, "GrOpen"},
 	/*   1 */ {GrCloseWrapper, "GrClose"},
 	/*   2 */ {GrGetScreenInfoWrapper, "GrGetScreenInfo"},
@@ -1635,8 +1652,8 @@ struct GrFunction {
 	/*  49 */ {GrLoadImageFromFileWrapper, "GrLoadImageFromFile"},
 	/*  50 */ {GrNewPixmapWrapper, "GrNewPixmap"},
 	/*  51 */ {GrCopyAreaWrapper, "GrCopyArea"},
-	/*  52 */ {GrSetFontSizeWrapper, "GrSetFontSize"},
-	/*  53 */ {GrCreateFontWrapper, "GrCreateFont"},
+	/*  52 */ {GrSetFontSizeExWrapper, "GrSetFontSizeEx"},
+	/*  53 */ {GrCreateFontExWrapper, "GrCreateFontEx"},
 	/*  54 */ {GrDestroyFontWrapper, "GrDestroyFont"},
 	/*  55 */ {GrReqShmCmdsWrapper, "GrReqShmCmds"},
 	/*  56 */ {GrShmCmdsFlushWrapper, "GrShmCmdsFlush"},
@@ -1708,6 +1725,7 @@ struct GrFunction {
 	/* 122 */ {GrSetTransformWrapper, "GrSetTransform" },
 	/* 123 */ {GrCreateFontFromBufferWrapper, "GrCreateFontFromBuffer"},
 	/* 124 */ {GrCopyFontWrapper, "GrCopyFont"},
+	/* 125 */ {GrDrawImagePartToFitWrapper, "GrDrawImagePartToFit"},
 };
 
 void
@@ -1761,43 +1779,70 @@ GrShmCmdsFlushWrapper(void *r)
  * This function is used to bind to the named socket which is used to
  * accept connections from the clients.
  */
-//int 
-//GsOpenSocket(void)
-//{
-//  struct sockaddr_un sckt;
-//#ifndef SUN_LEN
-//#define SUN_LEN(ptr)	((size_t) (((struct sockaddr_un *) 0)->sun_path) + strlen ((ptr)->sun_path))
-//#endif
-
-	//if (access(GR_NAMED_SOCKET, F_OK) == 0) {
-	//	/* FIXME: should try connecting to see if server is active */
-	//	if(unlink(GR_NAMED_SOCKET))
-	//		return -1;
-	//}
-
-	/* Create the socket: */
-	//if((un_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-	//	return -1;
-	
-
-	/* Bind a name to the socket: */
-	//sckt.sun_family = AF_UNIX;
-	//strncpy(sckt.sun_path, GR_NAMED_SOCKET, sizeof(sckt.sun_path));
-
-	//if(bind(un_sock, (struct sockaddr *) &sckt, SUN_LEN(&sckt)) < 0)
-	//	return -1;
-
-	/* Start listening on the socket: */
-	//if(listen(un_sock, 5) == -1)
-	//	return -1;
-	//return 1;
-//}
-
 int 
 GsOpenSocket(void)
 {
+#if !HELLOOS
 
-	// ============== Hello OS bucket =============================
+#if ELKS
+	struct sockaddr_na sckt;
+#ifndef SUN_LEN
+#define SUN_LEN(ptr)	(sizeof(sckt))
+#endif
+#elif __ECOS
+	struct sockaddr_in sckt;
+#ifndef SUN_LEN
+#define SUN_LEN(ptr)	(sizeof(sckt))
+#endif
+#else
+	struct sockaddr_un sckt;
+#ifndef SUN_LEN
+#define SUN_LEN(ptr)	((size_t) (((struct sockaddr_un *) 0)->sun_path) \
+		      		+ strlen ((ptr)->sun_path))
+#endif
+#endif /* ELKS */
+
+#if ELKS
+	if((un_sock = socket(AF_NANO, SOCK_STREAM, 0)) == -1)
+		return -1;
+
+	sckt.sun_family = AF_NANO;
+	sckt.sun_no = GR_NUMB_SOCKET;
+#elif __ECOS
+	/* Create the socket */
+	if((un_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) 
+	    return -1;
+
+	/* Bind to any/all local IP addresses */
+	memset( &sckt, '\0', sizeof(sckt) );
+	sckt.sin_family = AF_INET;
+	sckt.sin_len = sizeof(sckt);
+	sckt.sin_port = htons(6600);
+	sckt.sin_addr.s_addr = INADDR_ANY;
+#else
+	if (access(GR_NAMED_SOCKET, F_OK) == 0) {
+		/* FIXME: should try connecting to see if server is active */
+		if(unlink(GR_NAMED_SOCKET))
+			return -1;
+	}
+
+	/* Create the socket: */
+	if((un_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+		return -1;
+
+	/* Bind a name to the socket: */
+	sckt.sun_family = AF_UNIX;
+	strncpy(sckt.sun_path, GR_NAMED_SOCKET, sizeof(sckt.sun_path));
+#endif /* ELKS */
+	if(bind(un_sock, (struct sockaddr *) &sckt, SUN_LEN(&sckt)) < 0)
+		return -1;
+
+	/* Start listening on the socket: */
+	if(listen(un_sock, 5) == -1)
+		return -1;
+	return 1;
+
+#else /*!HELLOS*/
 	/* Create the socket: */
 	if((un_sock = bucket_open()) < 0)
 		return -1;
@@ -1807,55 +1852,51 @@ GsOpenSocket(void)
 		return -1;
 
 	return 1;
+#endif /*!HELLOS*/
 }
 
-//void
-//GsCloseSocket(void)
-//{
-//	if(un_sock != -1)
-//		close(un_sock);
-//	un_sock = -1;
-//	unlink(GR_NAMED_SOCKET);
-//}
 void
 GsCloseSocket(void)
 {
-	// ============== Hello OS bucket =============================
+#if !HELLOOS
+	if(un_sock != -1)
+		close(un_sock);
+	un_sock = -1;
+	unlink(GR_NAMED_SOCKET);
+#else /*!HELLOS*/
 	if(un_sock != -1)
 		bucket_close(un_sock);
 	un_sock = -1;
+#endif /*!HELLOS*/
 }
 
 /*
  * This function is used to accept a connnection from a client.
  */
-//void
-//GsAcceptClient(void)
-//{
-//	int i;
-//	struct sockaddr_un sckt;
-//
-//	socklen_t size = sizeof(sckt);
-//
-//	if((i = accept(un_sock, (struct sockaddr *) &sckt, &size)) == -1) {
-//		EPRINTF("nano-X: Error accept failed (%d)\n", errno);
-//		return;
-//	}
-//	GsAcceptClientFd(i);
-//}
 void
 GsAcceptClient(void)
 {
 	int i;
-
-	if((i = bucket_accept(un_sock)) < 0) {
-#if HELLOOS
-		EPRINTF("nano-X: Error accept failed (%d)\n", i);
+#if !HELLOOS
+#if ELKS
+	struct sockaddr_na sckt;
+#elif __ECOS
+	struct sockaddr_in sckt;
 #else
-		EPRINTF("nano-X: Error accept failed (%d)\n", errno);
+	struct sockaddr_un sckt;
 #endif
+	socklen_t size = sizeof(sckt);
+
+	if((i = accept(un_sock, (struct sockaddr *) &sckt, &size)) == -1) {
+		EPRINTF("nano-X: Error accept failed (%d)\n", errno);
 		return;
 	}
+#else /*!HELLOS*/
+	if((i = bucket_accept(un_sock)) < 0) {
+		EPRINTF("nano-X: Error accept failed (%d)\n", i);
+		return;
+	}
+#endif /*!HELLOS*/
 	GsAcceptClientFd(i);
 }
 
@@ -2083,11 +2124,12 @@ GsDropClient(int fd)
 	GR_CLIENT *client;
 
 	if((client = GsFindClient(fd))) { /* If it exists */
-#if UNIX
+#if !HELLOOS
 		close(fd);	/* Close the socket */
-#endif
-#if HELLOOS && !NONETWORK
+#else
+#if !NONETWORK
 		bucket_close(fd);
+#endif
 #endif
 		GsDestroyClientResources(client);
 		if(client == root_client)
@@ -2118,26 +2160,30 @@ GsPrintResources();
  * returns 0 for both error conditions and no data.
  */
 int
+#if ELKS
+GsRead(int fd, char *buf, int c)
+#else
 GsRead(int fd, void *buf, int c)
+#endif
 {
 	int e, n;
 
 	n = 0;
 
 	while(n < c) {
-#if HELLOOS
-		e = bucket_recv(fd, ((char *)buf) + n, c - n);
-#else
+#if !HELLOOS
 		e = read(fd, ((char *)buf) + n, c - n);
+#else
+		e = bucket_recv(fd, ((char *)buf) + n, c - n);
 #endif
 		if(e <= 0) {
 			if (e == 0)
 				EPRINTF("nano-X: client closed socket: %d\n", fd);
 			else
-#if HELLOOS
-				EPRINTF("nano-X: GsRead failed %d %d: %d\r\n", e, n, e);
-#else
+#if !HELLOOS
 				EPRINTF("nano-X: GsRead failed %d %d: %d\r\n", e, n, errno);
+#else
+				EPRINTF("nano-X: GsRead failed %d %d: %d\r\n", e, n, e);
 #endif
 			GsClose(fd);
 			return -1;
@@ -2158,10 +2204,10 @@ int GsWrite(int fd, void *buf, int c)
 	n = 0;
 
 	while(n < c) {
-#if HELLOOS
-		e = bucket_send(fd, ((char *) buf + n), (c - n));
-#else
+#if !HELLOOS
 		e = write(fd, ((char *) buf + n), (c - n));
+#else
+		e = bucket_send(fd, ((char *) buf + n), (c - n));
 #endif
 		if(e <= 0) {
 			GsClose(fd);
@@ -2213,7 +2259,7 @@ GsHandleClient(int fd)
 	req = (nxReq *)&buf[0];
 
 	if(req->reqType < GrTotalNumCalls) {
-		curfunc = GrFunctions[req->reqType].name;
+		curfunc = (char *)GrFunctions[req->reqType].name;
 		/*DPRINTF("HandleClient %s\n", curfunc);*/
 		GrFunctions[req->reqType].func(req);
 	} else {

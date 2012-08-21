@@ -55,6 +55,7 @@ static MWIMAGEBITS cursormask[MWMAX_CURSOR_BUFLEN];
 static MWIMAGEBITS cursorcolor[MWMAX_CURSOR_BUFLEN];
 
 extern int gr_mode;
+extern MOUSEDEVICE mousedev;
 
 /* Advance declarations */
 static int filter_relative(int, int, int, int *, int *, int, int);
@@ -394,7 +395,7 @@ GdShowCursor(PSD psd)
 	if(++curvisible != 1)
 		return prevcursor;
 	oldmode = gr_mode;
-	gr_mode = MWMODE_COPY;
+	gr_mode = MWROP_COPY;
 
 	saveptr = cursavbits;
 	cursavx = curminx;
@@ -455,7 +456,7 @@ GdHideCursor(PSD psd)
 	if(curvisible-- <= 0)
 		return prevcursor;
 	oldmode = gr_mode;
-	gr_mode = MWMODE_COPY;
+	gr_mode = MWROP_COPY;
 
 	saveptr = cursavbits;
 	for (y = cursavy; y <= cursavy2; y++) {

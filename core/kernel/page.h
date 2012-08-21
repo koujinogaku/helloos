@@ -1,6 +1,9 @@
 #ifndef PAGE_H
 #define PAGE_H
 
+#define PAGE_ERR_PROTECT  0x01
+#define PAGE_ERR_WRITE    0x02
+#define PAGE_ERR_USER     0x04
 #define PAGE_TYPE_PRESENT 0x01
 #define PAGE_TYPE_RDONLY  0x00
 #define PAGE_TYPE_RDWR    0x02

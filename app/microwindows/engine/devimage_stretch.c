@@ -1,32 +1,15 @@
 /*
- * Copyright (c) 2000, 2001, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000, 2001, 2003, 2006 Greg Haerr <greg@censoft.com>
  *
  * StretchImage - Resize an image
- *
- * !!! WARNING Not under the standard Microwindows license !!!
- * !!!         Read the following license (GPL)            !!!
  *
  * Major portions from SDL Simple DirectMedia Layer by Sam Lantinga
  * Copyright (C) 1997, 1998, 1999, 2000  Sam Lantinga <slouken@devolution.com>
  * This a stretch blit implementation based on ideas given to me by
  * Tomasz Cejner - thanks! :)
  */
-/*
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Library General Public
-    License as published by the Free Software Foundation; either
-    version 2 of the License, or (at your option) any later version.
-
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Library General Public License for more details.
-
-    You should have received a copy of the GNU Library General Public
-    License along with this library; if not, write to the Free
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
 #include "device.h"
+#include "swap.h"
 
 #if MW_FEATURE_IMAGES /* whole file */
 
@@ -51,7 +34,7 @@ static void name(type *src, int src_w, type *dst, int dst_w)		\
 
 DEFINE_COPY_ROW(copy_row1, unsigned char)
 DEFINE_COPY_ROW(copy_row2, unsigned short)
-DEFINE_COPY_ROW(copy_row4, unsigned long)
+DEFINE_COPY_ROW(copy_row4, uint32_t)
 
 static void copy_row3(unsigned char *src, int src_w, unsigned char *dst,
 	int dst_w)
@@ -168,8 +151,8 @@ GdStretchImage(PMWIMAGEHDR src, MWCLIPRECT *srcrect, PMWIMAGEHDR dst,
 			copy_row3(srcp, srcrect->width, dstp, dstrect->width);
 			break;
 		case 4:
-			copy_row4((unsigned long *)srcp, srcrect->width,
-				(unsigned long *)dstp, dstrect->width);
+			copy_row4((uint32_t *)srcp, srcrect->width,
+				(uint32_t *)dstp, dstrect->width);
 			break;
 		}
 

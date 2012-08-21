@@ -5,8 +5,6 @@
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Copyright (c) 2000 Alex Holden <alex@linuxhacker.org>
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Private definitions for the graphics server.
  * These definitions are not to be used by clients.
@@ -15,7 +13,7 @@
 #include "mwsystem.h"
 
 
-#if defined(__ECOS) && !defined(_NO_SVR_MAPPING)
+#if __ECOS && !defined(_NO_SVR_MAPPING)
 /*
  * Since eCos is a single task, multi-threaded environment, the
  * server and the client code share the same namespace.  This means
@@ -172,7 +170,7 @@ typedef	int	GR_DRAW_TYPE;
 #define	GR_DRAW_TYPE_WINDOW	1	/* windows */
 #define	GR_DRAW_TYPE_PIXMAP	2	/* pixmaps */
 
-#define	GR_MAX_MODE		MWMODE_MAX
+#define	GR_MAX_MODE		MWROP_MAX
 /*
  * List of elements for events.
  */

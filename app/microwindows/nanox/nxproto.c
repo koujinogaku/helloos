@@ -74,7 +74,7 @@ nxAssignReqbuffer(char *buffer, long size)
 
 	if ( reqbuf.buffer != 0 )
 		free(reqbuf.buffer);
-	reqbuf.buffer = (unsigned char *)buffer;
+	reqbuf.buffer = (GR_CHAR *)buffer;
 	reqbuf.bufptr = reqbuf.buffer;
 	reqbuf.bufmax = reqbuf.buffer + size;
 }
@@ -87,7 +87,9 @@ nxWriteSocket(char *buf, int todo)
         ACCESS_PER_THREAD_DATA();
 
 	do {
-#if HELLOOS
+#if !HELLOOS
+		written = write(nxSocket, buf, todo);
+#else
 		int retry;
 
 		for(retry=0;retry<100;retry++) {
@@ -96,15 +98,13 @@ nxWriteSocket(char *buf, int todo)
 				break;
 			syscall_wait(10);
 		}
-#else
-		written = write(nxSocket, buf, todo);
 #endif
 		if ( written < 0 ) {
 #if !HELLOOS
 			if ( errno == EAGAIN || errno == EINTR )
 				continue;
 #endif
-			EPRINTF("nxFlushReq: write failed: %d\n",written);
+			EPRINTF("nxFlushReq: write failed: %m\n");
 			exit(1);
 		}
 		buf += written;
@@ -172,14 +172,13 @@ nxFlushReq(long newsize, int reply_needed)
 			nxWriteSocket((char *)&req,sizeof(req));
 
 			if ( reply_needed )
-#if HELLOOS
-				while ( bucket_recv(nxSocket, &c, 1) != 1 )
-					;
-#else
+#if !HELLOOS
 				while ( read(nxSocket, &c, 1) != 1 )
 					;
+#else
+				while ( bucket_recv(nxSocket, &c, 1) != 1 )
+					;
 #endif
-
 			reqbuf.bufptr = reqbuf.buffer;
 
 			if ( reqbuf.buffer + newsize > reqbuf.bufmax ) {

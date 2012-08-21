@@ -1,32 +1,65 @@
-/* 
- * PCF font engine for Microwindows
- * Copyright (c) 2002, 2003 Greg Haerr <greg@censoft.com>
- * Copyright (c) 2001, 2002 by Century Embedded Technologies
- *
- * Supports dynamically loading .pcf and pcf.gz X11 fonts
- *
- * Written by Jordan Crouse
- * Bugfixed by Greg Haerr
- *
- * 28.01.2003:
- *   Patch for big-endian-machines by Klaus Fuerth <Fuerth.ELK@gmx.de>
- */
+/*
+* PCF font engine for Microwindows
+* Copyright (c) 2002, 2003, 2010 Greg Haerr <greg@censoft.com>
+* Copyright (c) 2001, 2002 by Century Embedded Technologies
+*
+* Supports dynamically loading .pcf and pcf.gz X11 fonts
+*
+* Written by Jordan Crouse
+* Bugfixed by Greg Haerr
+*
+* 28.01.2003:
+*   Patch for big-endian-machines by Klaus Fuerth <Fuerth.ELK@gmx.de>
+* 28.06.2005:
+*   Code should now work on both big- and little-endian machines.
+*   Added better support for leftBearing/rightBearing in input fonts.
+*    - Paul Bartholomew <oz_paulb@hotmail.com>
+* 29.06.2005:
+*   Fixed code that decides whether/not bits/bytes need to be swapped.
+*   Now, we always put them into the bit buffer as MSB/MSB, and the code
+*   that converts from the PCF input buffer to MWCOREFONT reads a
+*   byte-at-a-time.
+*    - Paul Bartholomew <oz_paulb@hotmail.com>
+* 07.07.2005:
+*   In "pcf_createfont()", removed the "unsigned long *ptr" (which
+*   points into the MSB/MSB bit buffer that we've just read from
+*   the .pcf file), and the "ptr += (xwidth + 1) / 2" adjustment
+*   that was done per-row of input data (since this assumes that
+*   "sizeof(*ptr) == 4", and also assumes each "row" of input
+*   date from the .pcf file is 4-byte aligned).
+*   I replaced it with an "unsigned char *p_glyph_in_rowbits", and
+*   adjust it after each row by the size of an input glyph 'row'
+*   ("glyph_in_rowbytes" - now returned via call to "pcf_readbitmaps()".
+*   This change, along with previous change that always reads the
+*   .pcf bitmap data as MSB/MSB, should make this code more compatible
+*   with various .pcf input files, as well as various CPU architectures.
+*    - Paul Bartholomew <oz_paulb@hotmail.com>
+* 2005-07-14:
+*   indention, check alloc results, use unsigned types for count loops,
+*   fix when the default char is undefined (as in cuarabic12.pcf.gz).
+*    - Alexander Stohr <alexander.stohr@gmx.de>
+* 5/21/2010 - g haerr
+*	nano-X doesn't support left and right bearing, must use width only
+*	and prepare with bearing builtin.  This fixes space char width bug.
+*	Set defaultchar in MWCFONT struct.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
-#include "swap.h"
 #include "device.h"
 #include "devfont.h"
-#include "../drivers/genfont.h"
+#include "genfont.h"
 
-extern MWPIXELVAL gr_background;
-extern MWBOOL gr_usebg;
+/* settable params*/
+#ifndef PCF_FONT_DIR
+#define PCF_FONT_DIR	"fonts/pcf"
+#endif
 
 /* The user hase the option including ZLIB and being able to    */
 /* directly read compressed .pcf files, or to omit it and save  */
 /* space.  The following defines make life much easier          */
-#ifdef HAVE_PCFGZ_SUPPORT
+#if HAVE_PCFGZ_SUPPORT
 #include <zlib.h>
 #define FILEP gzFile
 #define FOPEN(path, mode)           gzopen(path, mode)
@@ -41,25 +74,48 @@ extern MWBOOL gr_usebg;
 #define FCLOSE(file)                fclose(file)
 #endif
 
+typedef	unsigned char (*FP_READ8)(FILEP file);
+typedef	unsigned short (*FP_READ16)(FILEP file);
+typedef	uint32_t 		(*FP_READ32)(FILEP file);
+
 /* Handling routines for PCF fonts, use MWCOREFONT structure */
+PMWFONT pcf_createfont(const char *name, MWCOORD height, MWCOORD width, int attr);
 static void pcf_unloadfont(PMWFONT font);
 
+static void	get_endian_read_funcs(uint32_t format, FP_READ8 *p_fp_read8,
+	FP_READ16 *p_fp_read16, FP_READ32 *p_fp_read32);
+static unsigned short	readLSB16(FILEP file);
+static uint32_t			readLSB32(FILEP file);
+static unsigned short	readMSB16(FILEP file);
+static uint32_t			readMSB32(FILEP file);
+
 /* these procs used when font ASCII indexed*/
-static MWFONTPROCS pcf_fontprocs = {
+MWFONTPROCS pcf_fontprocs = {
+	0,				/* can't scale*/
 	MWTF_ASCII,
+	NULL,			/* init*/
+	pcf_createfont,
 	gen_getfontinfo,
 	gen_gettextsize,
 	gen_gettextbits,
 	pcf_unloadfont,
+#if STANDALONE
+	gen16_drawtext,
+#else
 	corefont_drawtext,
+#endif
 	NULL,			/* setfontsize */
 	NULL,			/* setfontrotation */
 	NULL,			/* setfontattr */
+	NULL			/* duplicate*/
 };
 
 /* these procs used when font requires UC16 index*/
 static MWFONTPROCS pcf_fontprocs16 = {
+	0,				/* can't scale*/
 	MWTF_UC16,		/* routines expect unicode 16 */
+	NULL,			/* init*/
+	pcf_createfont,
 	gen_getfontinfo,
 	gen16_gettextsize,
 	gen_gettextbits,
@@ -68,12 +124,12 @@ static MWFONTPROCS pcf_fontprocs16 = {
 	NULL,			/* setfontsize */
 	NULL,			/* setfontrotation */
 	NULL,			/* setfontattr */
-	NULL,			/* duplicate not yet implemented */
+	NULL			/* duplicate*/
 };
 
 /* These are maintained statically for ease FIXME*/
 static struct toc_entry *toc;
-static unsigned long toc_size;
+static uint32_t		 toc_size;
 
 /* Various definitions from the Free86 PCF code */
 #define PCF_FILE_VERSION	(('p'<<24)|('c'<<16)|('f'<<8)|1)
@@ -90,9 +146,11 @@ static unsigned long toc_size;
 #define PCF_DEFAULT_FORMAT	0x00000000
 
 #define PCF_GLYPH_PAD_MASK	(3<<0)
+#define PCF_GLYPH_PAD_SHIFT	(0)
 #define PCF_BYTE_MASK		(1<<2)
 #define PCF_BIT_MASK		(1<<3)
 #define PCF_SCAN_UNIT_MASK	(3<<4)
+#define PCF_SCAN_UNIT_SHIFT	(4)
 #define GLYPHPADOPTIONS		4
 
 #define PCF_LSB_FIRST		0
@@ -103,7 +161,7 @@ struct toc_entry {
 	int type;
 	int format;
 	int size;
-	int offset;
+	long offset;
 };
 
 struct prop_entry {
@@ -132,7 +190,7 @@ struct encoding_entry {
 	unsigned short min_byte1;	/* min_byte1 (hi order) */
 	unsigned short max_byte1;	/* max_byte1 (hi order) */
 	unsigned short defaultchar;
-	unsigned long count;		/* count of map entries */
+	uint32_t	   count;		/* count of map entries */
 	unsigned short *map;		/* font index -> glyph index */
 };
 
@@ -173,8 +231,8 @@ static unsigned char _reverse_byte[0x100] = {
 };
 
 /*
- *	Invert bit order within each BYTE of an array.
- */
+*	Invert bit order within each BYTE of an array.
+*/
 static void
 bit_order_invert(unsigned char *buf, int nbytes)
 {
@@ -183,9 +241,9 @@ bit_order_invert(unsigned char *buf, int nbytes)
 }
 
 /*
- *	Invert byte order within each 16-bits of an array.
- */
-void
+*	Invert byte order within each 16-bits of an array.
+*/
+static void
 two_byte_swap(unsigned char *buf, int nbytes)
 {
 	unsigned char c;
@@ -198,9 +256,9 @@ two_byte_swap(unsigned char *buf, int nbytes)
 }
 
 /*
- *	Invert byte order within each 32-bits of an array.
- */
-void
+*	Invert byte order within each 32-bits of an array.
+*/
+static void
 four_byte_swap(unsigned char *buf, int nbytes)
 {
 	unsigned char c;
@@ -225,31 +283,12 @@ readINT8(FILEP file)
 	return b;
 }
 
-/* read a 16-bit integer LSB16 format*/
-static unsigned short
-readLSB16(FILEP file)
-{
-	unsigned short s;
-
-	FREAD(file, &s, sizeof(s));
-	return wswap(s);
-}
-
-/* read a 32-bit integer LSB32 format*/
-static unsigned long
-readLSB32(FILEP file)
-{
-	unsigned long n;
-
-	FREAD(file, &n, sizeof(n));
-	return dwswap(n);
-}
 
 /* Get the offset of the given field */
-static int
+static long
 pcf_get_offset(int item)
 {
-	int i;
+	uint32_t i;
 
 	for (i = 0; i < toc_size; i++)
 		if (item == toc[i].type)
@@ -260,28 +299,28 @@ pcf_get_offset(int item)
 #if LATER
 /* Read the properties from the file */
 static int
-pcf_readprops(FILEP file, struct prop_entry **prop,
-	      struct string_table **strings)
+pcf_readprops(FILEP file, struct prop_entry **prop, struct string_table **strings)
 {
 	long offset;
-	unsigned long format;
-	unsigned long num_props;
-	unsigned long ssize;
-	unsigned long i;
+	uint32_t format;
+	uint32_t num_props;
+	uint32_t ssize;
+	uint32_t i;
 	struct string_table *s;
 	struct prop_entry *p;
 
 	unsigned char *string_buffer, *spos;
 
 	if ((offset = pcf_get_offset(PCF_PROPERTIES)) == -1)
-		return (-1);
+		return -1;
 	FSEEK(file, offset, SEEK_SET);
 
 	format = readLSB32(file);
 	num_props = readLSB32(file);
 
-	p = *prop = (struct prop_entry *) malloc(num_props *
-					     sizeof(struct prop_entry));
+	p = *prop = (struct prop_entry *)malloc(num_props * sizeof(struct prop_entry));
+	if (!p)
+		return -1;
 
 	for (i = 0; i < num_props; i++) {
 		p[i].name = readLSB32(file);
@@ -293,15 +332,17 @@ pcf_readprops(FILEP file, struct prop_entry **prop,
 	if (num_props & 3)
 		FSEEK(file, 4 - (num_props & 3), SEEK_CUR);
 
-
 	/* Read the entire set of strings into memory */
 	ssize = readLSB32(file);
-	spos = string_buffer = (unsigned char *) ALLOCA(ssize);
+	spos = string_buffer = (unsigned char *)ALLOCA(ssize);
+	if (!string_buffer)
+		return -1;
 	FREAD(file, string_buffer, ssize);
 
 	/* Allocate the group of strings */
-	s = *strings = (struct string_table *) ALLOCA(num_props *
-					       sizeof(struct string_table));
+	s = *strings = (struct string_table *)ALLOCA(num_props * sizeof(struct string_table));
+	if (!s)
+		return -1;
 
 	for (i = 0; i < num_props; i++) {
 		s[i].name = (unsigned char *) strdup(spos);
@@ -321,94 +362,146 @@ pcf_readprops(FILEP file, struct prop_entry **prop,
 
 /* Read the actual bitmaps into memory */
 static int
-pcf_readbitmaps(FILEP file, unsigned char **bits, int *bits_size,
-	unsigned long **offsets)
+pcf_readbitmaps(FILEP file, unsigned char **bits, int *bits_size, int *glyph_pad, uint32_t **offsets)
 {
 	long offset;
-	unsigned long format;
-	unsigned long num_glyphs;
-	unsigned long pad;
+	uint32_t format;
+	uint32_t num_glyphs;
+	uint32_t pad_index;
 	unsigned int i;
-	int endian;
-	unsigned long *o;
+	int endian_bits;
+	uint32_t *o;
 	unsigned char *b;
-	unsigned long bmsize[GLYPHPADOPTIONS];
+	FP_READ8	f_read8;
+	FP_READ16	f_read16;
+	FP_READ32	f_read32;
+	int	format_bit_endian, format_byte_endian;
+	int	desired_bit_endian, desired_byte_endian;
+	int	need_bit_reverse, need_byte_reverse;
+	int	format_scan_unit, desired_scan_unit;
+	uint32_t bmsize[GLYPHPADOPTIONS];
+
 
 	if ((offset = pcf_get_offset(PCF_BITMAPS)) == -1)
 		return -1;
 	FSEEK(file, offset, SEEK_SET);
 
 	format = readLSB32(file);
-	endian = (format & PCF_BIT_MASK)? PCF_LSB_FIRST: PCF_MSB_FIRST;
+	get_endian_read_funcs(format, &f_read8, &f_read16, &f_read32);
 
-	num_glyphs = readLSB32(file);
 
-	o = *offsets = (unsigned long *)malloc(num_glyphs * sizeof(unsigned long));
+	format_bit_endian = (format & PCF_BIT_MASK)? PCF_MSB_FIRST: PCF_LSB_FIRST;
+	format_byte_endian = (format & PCF_BYTE_MASK)? PCF_MSB_FIRST: PCF_LSB_FIRST;
+	format_scan_unit = (1 << ((format & PCF_SCAN_UNIT_MASK) >> PCF_SCAN_UNIT_SHIFT));
+
+	desired_bit_endian = PCF_MSB_FIRST;
+	desired_byte_endian = PCF_MSB_FIRST;
+	desired_scan_unit = (1 << 0);
+
+	if (format_bit_endian != desired_bit_endian)
+		need_bit_reverse = 1;
+	else
+		need_bit_reverse = 0;
+
+	if ((format_bit_endian == format_byte_endian) !=
+		(desired_bit_endian == desired_byte_endian)) {
+		/* If we want byte reverse, set need_byte_reverse to the size (1/2/4) */
+		need_byte_reverse = (1 << ((desired_bit_endian == desired_byte_endian) ? 
+			format_scan_unit : desired_scan_unit));
+	} else {
+		need_byte_reverse = 0;
+	}
+
+
+	endian_bits = (format & PCF_BIT_MASK)? PCF_MSB_FIRST: PCF_LSB_FIRST;
+
+	num_glyphs = f_read32(file);
+
+	o = *offsets = (uint32_t *)malloc(num_glyphs * sizeof(uint32_t));
+	if (!o)
+		return -1;
 	for (i=0; i < num_glyphs; ++i)
-		o[i] = readLSB32(file);
+		o[i] = f_read32(file);
 
 	for (i=0; i < GLYPHPADOPTIONS; ++i)
-		bmsize[i] = readLSB32(file);
+		bmsize[i] = f_read32(file);
 
-	pad = format & PCF_GLYPH_PAD_MASK;
-	*bits_size = bmsize[pad]? bmsize[pad] : 1;
+	pad_index = ((format & PCF_GLYPH_PAD_MASK) >> PCF_GLYPH_PAD_SHIFT);
+	*glyph_pad = (1 << pad_index);
+	*bits_size = bmsize[pad_index]? bmsize[pad_index] : 1;
 
 	/* alloc and read bitmap data*/
-	b = *bits = (unsigned char *) malloc(*bits_size);
+	b = *bits = (unsigned char *)malloc(*bits_size);
+	if (!b)
+		return -1;
 	FREAD(file, b, *bits_size);
 
 	/* convert bitmaps*/
-	bit_order_invert(b, *bits_size);
-#if MW_CPU_BIG_ENDIAN
-	if (endian == PCF_LSB_FIRST)
+	if (need_bit_reverse)
+		bit_order_invert(b, *bits_size);
+
+	switch(need_byte_reverse) {
+	default:
+	case 1:
+		break;
+	case 2:
 		two_byte_swap(b, *bits_size);
-#else
-	if (endian == PCF_MSB_FIRST)
-		two_byte_swap(b, *bits_size);
-#endif
+		break;
+	case 4:
+		four_byte_swap(b, *bits_size);
+		break;
+	}
+
 	return num_glyphs;
 }
 
 /* read character metric data*/
-static int
+static uint32_t
 pcf_readmetrics(FILE * file, struct metric_entry **metrics)
 {
-	long i, size, offset;
-	unsigned long format;
+	long offset;
+	uint32_t i, size;
+	uint32_t format;
 	struct metric_entry *m;
+	FP_READ8	f_read8;
+	FP_READ16	f_read16;
+	FP_READ32	f_read32;
 
 	if ((offset = pcf_get_offset(PCF_METRICS)) == -1)
 		return -1;
 	FSEEK(file, offset, SEEK_SET);
 
 	format = readLSB32(file);
+	get_endian_read_funcs(format, &f_read8, &f_read16, &f_read32);
 
 	if ((format & PCF_FORMAT_MASK) == PCF_DEFAULT_FORMAT) {
-		size = readLSB32(file);		/* 32 bits - Number of metrics*/
+		size = f_read32(file);		/* 32 bits - Number of metrics*/
 
-		m = *metrics = (struct metric_entry *) malloc(size *
-			sizeof(struct metric_entry));
+		m = *metrics = (struct metric_entry *)malloc(size * sizeof(struct metric_entry));
+		if (!m)
+			return -1;
 
 		for (i=0; i < size; i++) {
-			m[i].leftBearing = readLSB16(file);
-			m[i].rightBearing = readLSB16(file);
-			m[i].width = readLSB16(file);
-			m[i].ascent = readLSB16(file);
-			m[i].descent = readLSB16(file);
-			m[i].attributes = readLSB16(file);
+			m[i].leftBearing = f_read16(file);
+			m[i].rightBearing = f_read16(file);
+			m[i].width = f_read16(file);
+			m[i].ascent = f_read16(file);
+			m[i].descent = f_read16(file);
+			m[i].attributes = f_read16(file);
 		}
 	} else {
-		size = readLSB16(file);		/* 16 bits - Number of metrics*/
+		size = f_read16(file);		/* 16 bits - Number of metrics*/
 
-		m = *metrics = (struct metric_entry *) malloc(size *
-			sizeof(struct metric_entry));
+		m = *metrics = (struct metric_entry *)malloc(size * sizeof(struct metric_entry));
+		if (!m)
+			return -1;
 
 		for (i = 0; i < size; i++) {
-			m[i].leftBearing = readINT8(file) - 0x80;
-			m[i].rightBearing = readINT8(file) - 0x80;
-			m[i].width = readINT8(file) - 0x80;
-			m[i].ascent = readINT8(file) - 0x80;
-			m[i].descent = readINT8(file) - 0x80;
+			m[i].leftBearing = f_read8(file) - 0x80;
+			m[i].rightBearing = f_read8(file) - 0x80;
+			m[i].width = f_read8(file) - 0x80;
+			m[i].ascent = f_read8(file) - 0x80;
+			m[i].descent = f_read8(file) - 0x80;
 		}
 	}
 	return size;
@@ -418,30 +511,37 @@ pcf_readmetrics(FILE * file, struct metric_entry **metrics)
 static int
 pcf_read_encoding(FILE * file, struct encoding_entry **encoding)
 {
-	long offset, n;
-	unsigned long format;
+	long offset;
+	uint32_t n;
+	uint32_t format;
 	struct encoding_entry *e;
+	FP_READ8	f_read8;
+	FP_READ16	f_read16;
+	FP_READ32	f_read32;
 
 	if ((offset = pcf_get_offset(PCF_BDF_ENCODINGS)) == -1)
 		return -1;
 	FSEEK(file, offset, SEEK_SET);
 
 	format = readLSB32(file);
+	get_endian_read_funcs(format, &f_read8, &f_read16, &f_read32);
 
-	e = *encoding = (struct encoding_entry *)
-		malloc(sizeof(struct encoding_entry));
-	e->min_byte2 = readLSB16(file);
-	e->max_byte2 = readLSB16(file);
-	e->min_byte1 = readLSB16(file);
-	e->max_byte1 = readLSB16(file);
-	e->defaultchar = readLSB16(file);
-	e->count = (e->max_byte2 - e->min_byte2 + 1) *
-		(e->max_byte1 - e->min_byte1 + 1);
-	e->map = (unsigned short *) malloc(e->count * sizeof(unsigned short));
-	DPRINTF("def char %d (%x)\n", e->defaultchar, e->defaultchar);
+	e = *encoding = (struct encoding_entry *)malloc(sizeof(struct encoding_entry));
+	if (!e)
+		return -1;
+	e->min_byte2 = f_read16(file);
+	e->max_byte2 = f_read16(file);
+	e->min_byte1 = f_read16(file);
+	e->max_byte1 = f_read16(file);
+	e->defaultchar = f_read16(file);
+	e->count = ((uint32_t)e->max_byte2 - (uint32_t)e->min_byte2 + 1) *
+		((uint32_t)e->max_byte1 - (uint32_t)e->min_byte1 + 1);
+	e->map = (unsigned short *)malloc(e->count * sizeof(unsigned short));
+	if (!e->map)
+		return -1;
 
 	for (n = 0; n < e->count; ++n) {
-		e->map[n] = readLSB16(file);
+		e->map[n] = f_read16(file);
 		/*DPRINTF("ncode %x (%c) %x\n", n, n, e->map[n]);*/
 	}
 	DPRINTF("size %d byte1 %d,%d byte2 %d,%d\n", e->count,
@@ -450,10 +550,10 @@ pcf_read_encoding(FILE * file, struct encoding_entry **encoding)
 }
 
 static int
-pcf_read_toc(FILE * file, struct toc_entry **toc, unsigned long *size)
+pcf_read_toc(FILE * file, struct toc_entry **toc, uint32_t *size)
 {
-	long i;
-	unsigned long version;
+	uint32_t i;
+	uint32_t version;
 	struct toc_entry *t;
 
 	FSEEK(file, 0, SEEK_SET);
@@ -464,7 +564,7 @@ pcf_read_toc(FILE * file, struct toc_entry **toc, unsigned long *size)
 		return -1;
 
 	*size = readLSB32(file);
-	t = *toc = (struct toc_entry *) calloc(sizeof(struct toc_entry), *size);
+	t = *toc = (struct toc_entry *)calloc(sizeof(struct toc_entry), *size);
 	if (!t)
 		return -1;
 
@@ -479,79 +579,82 @@ pcf_read_toc(FILE * file, struct toc_entry **toc, unsigned long *size)
 	return 0;
 }
 
-PMWCOREFONT
-pcf_createfont(const char *name, MWCOORD height, int attr)
+/* create font and allocate MWCOREFONT struct*/
+PMWFONT pcf_createfont(const char *name, MWCOORD height, MWCOORD width, int attr)
 {
-	FILE *file = 0;
-	MWCOREFONT *pf = 0;
-	int offset;
-	int i;
-	int count;
+	FILE *file = NULL;
+	MWCOREFONT *pf = NULL;
+	uint32_t i, count, offset;
 	int bsize;
 	int bwidth;
-	int err = 0;
-	struct metric_entry *metrics = 0;
-	struct encoding_entry *encoding = 0;
+	int err = -1;
+	struct metric_entry *metrics = NULL;
+	struct encoding_entry *encoding = NULL;
 	MWIMAGEBITS *output;
-	unsigned char *glyphs = 0;
-	unsigned long *glyphs_offsets = 0;
-	int max_width = 0, max_descent = 0, max_ascent = 0, max_height = 0;
-	int glyph_count;
-	unsigned long *goffset = NULL;
+	unsigned char *glyphs = NULL;
+	uint32_t *glyphs_offsets = NULL;
+	int max_width = 0, max_descent = 0, max_ascent = 0, max_height;
+	int result;
+	unsigned int glyph_count;
+	uint32_t *goffset = NULL;
 	unsigned char *gwidth = NULL;
 	int uc16;
+	int glyph_pad;
 	char fname[256];
 
 	/* Try to open the file */
 	file = FOPEN(name, "rb");
 	if (!file) {
-		strcpy(fname, PCF_FONT_DIR "/");
-		strcpy(fname + sizeof(PCF_FONT_DIR), name);
+		sprintf(fname, "%s/%s", PCF_FONT_DIR, name);
 		file = FOPEN(fname, "rb");
 	}
 	if (!file)
 		return NULL;
 
-	if (!(pf = (MWCOREFONT *) malloc(sizeof(MWCOREFONT)))) {
-		err = -1;
-		goto leave_func;
-	}
+	if (!(pf = (MWCOREFONT *)malloc(sizeof(MWCOREFONT))))
+		goto err_exit;
 
-	if (!(pf->cfont = (PMWCFONT) calloc(sizeof(MWCFONT), 1))) {
-		err = -1;
-		goto leave_func;
-	}
+	if (!(pf->cfont = (PMWCFONT)calloc(sizeof(MWCFONT), 1)))
+		goto err_exit;
 
 
 	/* Read the table of contents */
-	if (pcf_read_toc(file, &toc, &toc_size) == -1) {
-		err = -1;
-		goto leave_func;
-	}
+	if (pcf_read_toc(file, &toc, &toc_size) == -1)
+		goto err_exit;
 
 	/* Now, read in the bitmaps */
-	glyph_count = pcf_readbitmaps(file, &glyphs, &bsize, &glyphs_offsets);
-	DPRINTF("glyph_count = %d (%x)\n", glyph_count, glyph_count);
+	result = pcf_readbitmaps(file, &glyphs, &bsize, &glyph_pad, &glyphs_offsets);
+	if (result == -1)
+		goto err_exit;
 
-	if (glyph_count == -1) {
-		err = -1;
-		goto leave_func;
-	}
+	glyph_count = result;
+	DPRINTF("glyph_count = %u (%x)\n", glyph_count, glyph_count);
 
-	if (pcf_read_encoding(file, &encoding) == -1) {
-		err = -1;
-		goto leave_func;
-	}
+	if (pcf_read_encoding(file, &encoding) == -1)
+		goto err_exit;
 
 	pf->cfont->firstchar = encoding->min_byte2 * (encoding->min_byte1 + 1);
+	pf->cfont->defaultchar = encoding->defaultchar;
+	DPRINTF("firstchar %d\n", pf->cfont->firstchar);
+	DPRINTF("default char %d (%x)\n", pf->cfont->defaultchar, pf->cfont->defaultchar);
 
 	/* Read in the metrics */
 	count = pcf_readmetrics(file, &metrics);
 
 	/* Calculate various maximum values */
 	for (i = 0; i < count; i++) {
-		if (metrics[i].width > max_width)
-			max_width = metrics[i].width;
+		int width = metrics[i].rightBearing;
+
+		/* negative left bearing not handled*/
+		//if (metrics[i].leftBearing < 0)
+			//width += abs(metrics[i].leftBearing);
+
+		/* handle space and other cases where width > rightBearing*/
+		if (metrics[i].width > width)
+			width = metrics[i].width;
+
+		if (width > max_width)
+			max_width = width;
 		if (metrics[i].ascent > max_ascent)
 			max_ascent = metrics[i].ascent;
 		if (metrics[i].descent > max_descent)
@@ -566,11 +669,17 @@ pcf_createfont(const char *name, MWCOORD height, int attr)
 	/* Allocate enough room to hold all of the bits and the offsets */
 	bwidth = (max_width + 15) / 16;
 
-	pf->cfont->bits = (MWIMAGEBITS *) calloc((max_height *
-		(sizeof(MWIMAGEBITS) * bwidth)), glyph_count);
-	goffset = (unsigned long *) malloc(glyph_count *
-		sizeof(unsigned long));
-	gwidth = (unsigned char *) malloc(glyph_count * sizeof(unsigned char));
+	pf->cfont->bits = (MWIMAGEBITS *)calloc((max_height * (sizeof(MWIMAGEBITS) * bwidth)), glyph_count);
+	if (!pf->cfont->bits)
+		goto err_exit;
+
+	goffset = (uint32_t *)malloc(glyph_count * sizeof(uint32_t));
+	if (!goffset)
+		goto err_exit;
+
+	gwidth = (unsigned char *)malloc(glyph_count * sizeof(unsigned char));
+	if (!gwidth)
+		goto err_exit;
 
 	output = (MWIMAGEBITS *) pf->cfont->bits;
 	offset = 0;
@@ -579,61 +688,122 @@ pcf_createfont(const char *name, MWCOORD height, int attr)
 	for (i = 0; i < glyph_count; i++) {
 		int h, w;
 		int y = max_height;
-		unsigned long *ptr =
-			(unsigned long *) (glyphs + glyphs_offsets[i]);
-
-		/* # words image width*/
-		int lwidth = (metrics[i].width + 15) / 16;
+		unsigned char *p_glyph_in_rowbits = glyphs + glyphs_offsets[i];
+		int glyph_in_rowbytes;
+		int width;		/* glyph advancement width*/
+		int lwidth;		/* # words image width*/
 
 		/* # words image width, corrected for bounding box problem*/
 		int xwidth = (metrics[i].rightBearing - metrics[i].leftBearing + 15) / 16;
 
-		gwidth[i] = (unsigned char) metrics[i].width;
+		/* Calculate width (advancement) for glyph*/
+		width = metrics[i].rightBearing;
+
+		/* negative left bearing not handled*/
+		//if (metrics[i].leftBearing < 0)
+			//width += abs(metrics[i].leftBearing);
+
+		/* handle space and other cases where width > rightBearing*/
+		if (metrics[i].width > width)
+			width = metrics[i].width;
+		gwidth[i] = width;
+
+		if (metrics[i].leftBearing < 0)
+			DPRINTF("glyph %d (%c) left bearing %d, right bearing %d, width %d\n",
+				i, i, metrics[i].leftBearing, metrics[i].rightBearing, gwidth[i]);
+
+		lwidth = (width + 15) / 16;		/* word padding for gen16 routines*/
+
 		goffset[i] = offset;
+		offset += lwidth * max_height;
 
-		offset += (lwidth * max_height);
+		glyph_in_rowbytes = xwidth * sizeof(unsigned short);
+		glyph_in_rowbytes += glyph_pad - 1;
+		glyph_in_rowbytes &= ~(glyph_pad - 1);
 
+		/* fill in blank rows above glyph bitmap*/
 		for (h = 0; h < (max_ascent - metrics[i].ascent); h++) {
-			for (w = 0; w < lwidth; w++)
+			for (w = 0; w < lwidth; w++) {
 				*output++ = 0;
+			}
 			y--;
 		}
 
+		/* copy glyph bits into MWCFONT format*/
 		for (h = 0; h < (metrics[i].ascent + metrics[i].descent); h++) {
-			unsigned short *val = (unsigned short *) ptr;
+				int            bearing, carry_shift;
+				unsigned short carry = 0;
+				unsigned char	*p8;
+				unsigned short	val16;
 
-			for (w = 0; w < lwidth; w++)
-				*output++ = val[w];
-			ptr += (xwidth + 1) / 2;
-			y--;
+				/* leftBearing correction*/
+				bearing = metrics[i].leftBearing;
+
+				if (bearing < 0)	/* negative bearing not handled yet*/
+					bearing = 0;
+				carry_shift = 16 - bearing;
+
+				for (w = 0; w < lwidth; w++) {
+					if (w < xwidth) {
+						p8 = p_glyph_in_rowbits + (w * sizeof(unsigned short));
+						val16 = ((((unsigned short)p8[0]) << 8) | p8[1]);
+					} else {
+						val16 = 0;
+					}
+					*output++ = (val16 >> bearing) | carry;
+					carry = val16 << carry_shift;
+				}
+
+				p_glyph_in_rowbits += glyph_in_rowbytes;
+
+				y--;
 		}
 
-		for (; y > 0; y--)
-			for (w = 0; w < lwidth; w++)
+		/* fill in blank rows below glyph bitmap*/
+		for (; y > 0; y--) {
+			for (w = 0; w < lwidth; w++) {
 				*output++ = 0;
+			}
+		}
 	}
 
 	/* reorder offsets and width according to encoding map */
-	pf->cfont->offset = (unsigned long *) malloc(encoding->count *
-		sizeof(unsigned long));
-	pf->cfont->width = (unsigned char *) malloc(encoding->count *
-		 sizeof(unsigned char));
+	pf->cfont->offset = (uint32_t *)malloc(encoding->count * sizeof(uint32_t));
+	if (!pf->cfont->offset)
+		goto err_exit;
+
+	pf->cfont->width = (unsigned char *)malloc(encoding->count * sizeof(unsigned char));
+	if (!pf->cfont->width)
+		goto err_exit;
+
 	for (i = 0; i < encoding->count; ++i) {
 		unsigned short n = encoding->map[i];
-		if (n == 0xffff)	/* map non-existent chars to default char */
-			n = encoding->map[encoding->defaultchar];
-		pf->cfont->offset[i] = goffset[n];
-		pf->cfont->width[i] = gwidth[n];
+
+		if (n == 0xffff) {	/* map non-existent chars to default char */
+			/* get default char map index*/
+			n = encoding->map[encoding->defaultchar - pf->cfont->firstchar];
+
+			/* if default is non-existent then char is empty */
+			if (n == 0xffff) {
+				/* casts necessary to remove const*/
+				((uint32_t *)pf->cfont->offset)[i] = 0;
+				((unsigned char *)pf->cfont->width)[i] = 0;
+				continue;
+			}
+		}
+		/* casts necessary to remove const*/
+		((uint32_t *)pf->cfont->offset)[i] = goffset[n];
+		((unsigned char *)pf->cfont->width)[i] = gwidth[n];
 	}
 	pf->cfont->size = encoding->count;
 
-	uc16 = pf->cfont->firstchar > 255 || 
-		(pf->cfont->firstchar + pf->cfont->size) > 255;
+	uc16 = pf->cfont->firstchar > 255 || (pf->cfont->firstchar + pf->cfont->size) > 255;
 	pf->fontprocs = uc16? &pcf_fontprocs16: &pcf_fontprocs;
 	pf->fontsize = pf->fontrotation = pf->fontattr = 0;
 	pf->name = "PCF";
+	err = 0;
 
-leave_func:
+err_exit:
 	if (goffset)
 		free(goffset);
 	if (gwidth)
@@ -659,7 +829,7 @@ leave_func:
 		FCLOSE(file);
 
 	if (err == 0 && pf)
-		return pf;
+		return (PMWFONT)pf;
 
 	pcf_unloadfont((PMWFONT)pf);
 	return 0;
@@ -673,14 +843,92 @@ pcf_unloadfont(PMWFONT font)
 
 	if (pfc) {
 		if (pfc->width)
-			free(pf->cfont->width);
+			free((char *)pf->cfont->width);
 		if (pfc->offset)
-			free(pf->cfont->offset);
+			free((char *)pf->cfont->offset);
 		if (pfc->bits)
-			free(pf->cfont->bits);
+			free((char *)pf->cfont->bits);
 
 		free(pf->cfont);
 	}
 
 	free(font);
+}
+
+static void
+get_endian_read_funcs(uint32_t format, FP_READ8 *p_fp_read8, FP_READ16 *p_fp_read16,
+	FP_READ32 *p_fp_read32)
+{
+	*p_fp_read8 = (FP_READ8)readINT8;
+
+	if (format & PCF_BYTE_MASK) {
+		/* MSB byte order */
+		*p_fp_read16 = readMSB16;
+		*p_fp_read32 = readMSB32;
+	} else {
+		/* LSB byte order */
+		*p_fp_read16 = readLSB16;
+		*p_fp_read32 = readLSB32;
+	}
+}
+
+static unsigned short
+readLSB16(FILEP file)
+{
+	unsigned short	ret;
+	unsigned char	ch;
+	int	i;
+
+	ret = 0;
+	for (i = 0; i < (16/8); i++) {
+		ch = readINT8(file);
+		ret |= (((unsigned short)ch) << (i * 8));
+	}
+	return ret;
+}
+
+static uint32_t
+readLSB32(FILEP file)
+{
+	uint32_t			ret = 0;
+	unsigned char	ch;
+	int	i;
+
+	for (i = 0; i < (32/8); i++) {
+		ch = readINT8(file);
+		ret |= (((uint32_t)ch) << (i * 8));
+	}
+	return ret;
+}
+
+
+static unsigned short
+readMSB16(FILEP file)
+{
+	unsigned short	ret = 0;
+	unsigned char	ch;
+	int	i;
+
+	for (i = 0; i < (16/8); i++) {
+		ch = readINT8(file);
+		ret <<= 8;
+		ret |= ch;
+	}
+	return ret;
+}
+
+static uint32_t
+readMSB32(FILEP file)
+{
+	uint32_t			ret;
+	unsigned char	ch;
+	int	i;
+
+	ret = 0;
+	for (i = 0; i < (32/8); i++) {
+		ch = readINT8(file);
+		ret <<= 8;
+		ret |= ch;
+	}
+	return ret;
 }

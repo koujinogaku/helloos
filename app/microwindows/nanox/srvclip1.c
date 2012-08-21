@@ -1,11 +1,9 @@
 /*
  * Copyright (c) 2000 Greg Haerr <greg@censoft.com>
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  */
-#include "string.h"
-
+#include <stdio.h>
+#include <stdlib.h>
 #include "serv.h"
 
 /*

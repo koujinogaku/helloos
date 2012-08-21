@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2000, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2003, 2005, 2010 Greg Haerr <greg@censoft.com>
  *
  * Screen Driver Utilities
  * 
@@ -26,7 +26,10 @@ extern MWCFONT font_X6x13;			/* MWFONT_SYSTEM_FIXED (should be ansi)*/
 
 /* handling routines for MWCOREFONT*/
 static MWFONTPROCS fontprocs = {
+	0,				/* capabilities*/
 	MWTF_ASCII,		/* routines expect ascii*/
+	NULL,			/* init*/
+	NULL,			/* createfont*/
 	gen_getfontinfo,
 	gen_gettextsize,
 	gen_gettextbits,
@@ -35,9 +38,8 @@ static MWFONTPROCS fontprocs = {
 	NULL,			/* setfontsize*/
 	NULL,			/* setfontrotation*/
 	NULL,			/* setfontattr*/
+	NULL			/* duplicate*/
 };
-
-
 
 /*
  * Starting in v0.89pl12, we've moved to just two standard fonts,
@@ -59,12 +61,22 @@ static MWFONTPROCS fontprocs = {
 
 /* first font is default font*/
 MWCOREFONT gen_fonts[NUMBER_FONTS] = {
-	{&fontprocs, 0, 0, 0, (char*)MWFONT_SYSTEM_VAR,   &font_winFreeSansSerif11x13},
-	{&fontprocs, 0, 0, 0, (char*)MWFONT_SYSTEM_FIXED, &font_X6x13},
+	{&fontprocs, 0, 0, 0, 0, MWFONT_SYSTEM_VAR,   &font_winFreeSansSerif11x13},
+	{&fontprocs, 0, 0, 0, 0, MWFONT_SYSTEM_FIXED, &font_X6x13},
 	/* deprecated redirections for the time being*/
-	{&fontprocs, 0, 0, 0, "Helvetica",         &font_winFreeSansSerif11x13}, /* redirect*/
-	{&fontprocs, 0, 0, 0, "Terminal",          &font_X6x13}	/* redirect*/
+	{&fontprocs, 0, 0, 0, 0, "Helvetica",         &font_winFreeSansSerif11x13}, /* redirect*/
+	{&fontprocs, 0, 0, 0, 0, "Terminal",          &font_X6x13}	/* redirect*/
 };
+
+/*GB: pointer to an user builtin font table. */
+MWCOREFONT *user_builtin_fonts = NULL;
+
+/*  Sets the fontproc to fontprocs.  */
+void
+gen_setfontproc(MWCOREFONT *pf)
+{
+	pf->fontprocs = &fontprocs;
+}
 
 /*
  * Generalized low level get font info routine.  This
@@ -74,7 +86,7 @@ MWBOOL
 gen_getfontinfo(PMWFONT pfont, PMWFONTINFO pfontinfo)
 {
 	PMWCFONT	pf = ((PMWCOREFONT)pfont)->cfont;
-	int		i;
+	int			i;
 
 	pfontinfo->maxwidth = pf->maxwidth;
 	pfontinfo->height = pf->height;
@@ -103,9 +115,9 @@ gen_gettextsize(PMWFONT pfont, const void *text, int cc, MWTEXTFLAGS flags,
 	MWCOORD *pwidth, MWCOORD *pheight, MWCOORD *pbase)
 {
 	PMWCFONT		pf = ((PMWCOREFONT)pfont)->cfont;
-	const unsigned char *	str = text;
-	unsigned int		c;
-	int			width;
+	const unsigned char *str = text;
+	unsigned int	c;
+	int				width;
 
 	if(pf->width == NULL)
 		width = cc * pf->maxwidth;
@@ -113,7 +125,12 @@ gen_gettextsize(PMWFONT pfont, const void *text, int cc, MWTEXTFLAGS flags,
 		width = 0;
 		while(--cc >= 0) {
 			c = *str++;
-			if(c >= pf->firstchar && c < pf->firstchar+pf->size)
+
+			/* if char not in font, map to first character by default*/
+			if(c < pf->firstchar || c >= pf->firstchar+pf->size)
+				c = pf->firstchar;
+
+			/*if(c >= pf->firstchar && c < pf->firstchar+pf->size)*/
 				width += pf->width[c - pf->firstchar];
 		}
 	}
@@ -131,10 +148,10 @@ void
 gen16_gettextsize(PMWFONT pfont, const void *text, int cc, MWTEXTFLAGS flags,
 	MWCOORD *pwidth, MWCOORD *pheight, MWCOORD *pbase)
 {
-	PMWCFONT		pf = ((PMWCOREFONT) pfont)->cfont;
-	const unsigned short *	str = text;
-	unsigned		int c;
-	int			width;
+	PMWCFONT		pf = ((PMWCOREFONT)pfont)->cfont;
+	const unsigned short *str = text;
+	unsigned int	c;
+	int				width;
 
 	if (pf->width == NULL)
 		width = cc * pf->maxwidth;
@@ -142,7 +159,12 @@ gen16_gettextsize(PMWFONT pfont, const void *text, int cc, MWTEXTFLAGS flags,
 		width = 0;
 		while (--cc >= 0) {
 			c = *str++;
-			if (c >= pf->firstchar && c < pf->firstchar + pf->size)
+
+			/* if char not in font, map to first character by default*/
+			if(c < pf->firstchar || c >= pf->firstchar+pf->size)
+				c = pf->firstchar;
+
+			/*if (c >= pf->firstchar && c < pf->firstchar+pf->size)*/
 				width += pf->width[c - pf->firstchar];
 		}
 	}
@@ -161,7 +183,7 @@ gen_gettextbits(PMWFONT pfont, int ch, const MWIMAGEBITS **retmap,
 	MWCOORD *pwidth, MWCOORD *pheight, MWCOORD *pbase)
 {
 	PMWCFONT		pf = ((PMWCOREFONT)pfont)->cfont;
-	int 			count, width;
+	int 			width;
 	const MWIMAGEBITS *	bits;
 
 	/* if char not in font, map to first character by default*/
@@ -171,9 +193,17 @@ gen_gettextbits(PMWFONT pfont, int ch, const MWIMAGEBITS **retmap,
 	ch -= pf->firstchar;
 
 	/* get font bitmap depending on fixed pitch or not*/
-	bits = pf->bits + (pf->offset? pf->offset[ch]: (pf->height * ch));
+	/* automatically detect if offset is 16 or 32 bit */
+	if( pf->offset ) {
+		if( ((uint32_t *)pf->offset)[0] >= 0x00010000 )
+			bits = pf->bits + ((unsigned short *)pf->offset)[ch];
+		else
+			bits = pf->bits + ((uint32_t *)pf->offset)[ch];
+	} else
+		bits = pf->bits + (pf->height * ch);
+		
  	width = pf->width ? pf->width[ch] : pf->maxwidth;
-	count = MWIMAGE_WORDS(width) * pf->height; 
+//	count = MWIMAGE_WORDS(width) * pf->height; 
 
 	*retmap = bits;
 
@@ -248,10 +278,3 @@ gen_drawbitmap(PSD psd,MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
   }
 }
 #endif /* NOTUSED*/
-
-/*
-void corefont_drawtext(PMWFONT pfont, PSD psd, MWCOORD x, MWCOORD y,
-		const void *text, int cc, MWTEXTFLAGS flags)
-{
-}
-*/

@@ -8,13 +8,14 @@
  * fonts (ASCII < 0x0100 only) will display out of the 
  * builtin font instead.
  */
+
 #include "device.h"
 #include "devfont.h"
-#include "../drivers/genfont.h"
+#include "genfont.h"
 
 #if HAVE_BIG5_SUPPORT
 static void
-big5_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
+big5_gettextbits(PMWFONT pfont, int ch, const MWIMAGEBITS **retmap,
 	MWCOORD *pwidth, MWCOORD *pheight, MWCOORD *pbase)
 {
 	unsigned int	CH = ch >> 8;
@@ -58,7 +59,7 @@ big5_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
 
 #if HAVE_GB2312_SUPPORT
 static void
-euccn_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
+euccn_gettextbits(PMWFONT pfont, int ch, const MWIMAGEBITS **retmap,
 	MWCOORD *pwidth, MWCOORD *pheight, MWCOORD *pbase)
 {
 	unsigned int	CH = ch >> 8;
@@ -87,7 +88,7 @@ euccn_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
 
 #if HAVE_JISX0213_SUPPORT
 static void
-jis_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
+jis_gettextbits(PMWFONT pfont, int ch, const MWIMAGEBITS **retmap,
 	MWCOORD *pwidth, MWCOORD *pheight, MWCOORD *pbase)
 {
 	unsigned int	CH = ch >> 8;
@@ -135,11 +136,16 @@ jis_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
 
 #if HAVE_KSC5601_SUPPORT
 static void
-euckr_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
+euckr_gettextbits(PMWFONT pfont, int ch, const MWIMAGEBITS **retmap,
 	MWCOORD *pwidth, MWCOORD *pheight, MWCOORD *pbase)
 {
+#ifdef BIG_ENDIAN
 	unsigned int	CH = ch >> 8;
 	unsigned int	CL = ch & 0xFF;
+#else
+	unsigned int	CH = ch & 0xFF;
+	unsigned int 	CL = ch >> 8;
+#endif
 	int		mc;
 	static MWIMAGEBITS map[16];
 	extern unsigned short convert_ksc_to_johab(unsigned char CH,
@@ -159,7 +165,7 @@ euckr_gettextbits(PMWFONT pfont, unsigned int ch, const MWIMAGEBITS **retmap,
 #endif /* HAVE_KSC5601_SUPPORT*/
 
 void
-dbcs_gettextbits(PMWFONT pfont, unsigned int ch, MWTEXTFLAGS flags,
+dbcs_gettextbits(PMWFONT pfont, int ch, MWTEXTFLAGS flags,
 	const MWIMAGEBITS **retmap, MWCOORD *pwidth, MWCOORD *pheight,
 	MWCOORD *pbase)
 {

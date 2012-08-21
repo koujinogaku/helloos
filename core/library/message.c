@@ -11,7 +11,9 @@
 #include "display.h"
 #include "stdlib.h"
 
+#ifndef min
 #define min(a, b)       (a) < (b) ? a : b
+#endif
 
 static struct msg_list msg_listhead;
 //static char msg_status=0;

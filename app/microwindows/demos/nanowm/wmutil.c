@@ -1,17 +1,13 @@
 /*
  * NanoWM - Window Manager for Nano-X
  *
- * Copyright (C) 2000 Greg Haerr <greg@censoft.com>
+ * Copyright (C) 2000, 2010 Greg Haerr <greg@censoft.com>
  * Copyright (C) 2000 Alex Holden <alex@linuxhacker.org>
  */
 #include "portunixstd.h"
 #include "memory.h"
 
-#define MWINCLUDECOLORS
 #include "nano-X.h"
-/* Uncomment this to get debugging output from this file */
-/*#define DEBUG*/
-
 #include "nanowm.h"
 
 static win *windows = NULL;
@@ -20,7 +16,7 @@ static win *windows = NULL;
  * Find the windowlist entry for the specified window ID and return a pointer
  * to it, or NULL if it isn't in the list.
  */
-win *find_window(GR_WINDOW_ID wid)
+win *wm_find_window(GR_WINDOW_ID wid)
 {
 	win *w = windows;
 
@@ -43,13 +39,14 @@ win *find_window(GR_WINDOW_ID wid)
  * Add a new entry to the front of the windowlist.
  * Returns -1 on failure or 0 on success.
  */
-int add_window(win *window)
+int wm_add_window (win * window)
 {
 	win *w;
 
 	Dprintf("Adding window %d\n", window->wid);
 
-	if(!(w = malloc(sizeof(win)))) return -1;
+	if(!(w = malloc(sizeof(win))))
+		return -1;
 
 	w->wid = window->wid;
 	w->pid = window->pid;
@@ -60,7 +57,6 @@ int add_window(win *window)
 	w->data = window->data;
 	w->next = windows;
 	windows = w;
-
 	return 0;
 }
 
@@ -71,7 +67,7 @@ int add_window(win *window)
  * prev pointer to the structure which would increase the memory usage.
  * Returns -1 on failure or 0 on success.
  */
-int remove_window(win *window)
+int wm_remove_window(win *window)
 {
 	win *w = windows;
 	win *prev = NULL;
@@ -87,7 +83,6 @@ int remove_window(win *window)
 		prev = w;
 		w = w->next;
 	}
-
 	return -1;
 }
 
@@ -95,7 +90,7 @@ int remove_window(win *window)
  * Remove an entry and all it's children from the windowlist.
  * Returns -1 on failure or 0 on success.
  */
-int remove_window_and_children(win *window)
+int wm_remove_window_and_children(win *window)
 {
 	win *t, *w = windows;
 	win *prev = NULL;
@@ -106,12 +101,13 @@ int remove_window_and_children(win *window)
 	while(w) {
 		Dprintf("Examining window %d (pid %d)\n", w->wid, w->pid);
 		if((w->pid == pid) || (w == window)) {
-			Dprintf("Removing window %d (pid %d)\n", w->wid,
-								w->pid);
-			if(prev) prev->next = w->next;
+			Dprintf("Removing window %d (pid %d)\n", w->wid, w->pid);
+			if(prev)
+				prev->next = w->next;
 			else windows = w->next;
 			t = w->next;
-			if(w->data) free(w->data);
+			if(w->data)
+				free(w->data);
 			free(w);
 			w = t;
 			continue;
@@ -119,6 +115,5 @@ int remove_window_and_children(win *window)
 		prev = w;
 		w = w->next;
 	}
-
 	return -1;
 }

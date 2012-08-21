@@ -1,13 +1,15 @@
 /*
  * Convert BDF files to C source and/or Rockbox .fnt file format
  *
- * Copyright (c) 2002 by Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2002, 2005 by Greg Haerr <greg@censoft.com>
  *
  * What fun it is converting font data...
  *
+ * 01/09/10 fix copyright notice sscanf
  * 09/17/02	Version 1.0
  */
 #include <stdio.h>
+#include <stdint.h>			/* for uint32_t*/
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -36,11 +38,11 @@ typedef struct {
 	int		ascent;		/* ascent (baseline) height*/
 	int		firstchar;	/* first character in bitmap*/
 	int		size;		/* font size in glyphs*/
-	MWIMAGEBITS *	bits;		/* 16-bit right-padded bitmap data*/
-	unsigned long *	offset;		/* offsets into bitmap data*/
-	unsigned char *	width;		/* character widths or NULL if fixed*/
+	/*const*/ MWIMAGEBITS   *bits;	/* 16-bit right-padded bitmap data*/
+	/*const*/ uint32_t *offset;/* offsets into bitmap data*/
+	/*const*/ unsigned char *width;	/* character widths or NULL if fixed*/
 	int		defaultchar;	/* default char (not glyph index)*/
-	long		bits_size;	/* # words of MWIMAGEBITS bits*/
+	int32_t		bits_size;	/* # words of MWIMAGEBITS bits*/
 
 	/* unused by runtime system, read in by convbdf*/
 	char *		facename;	/* facename of font*/
@@ -92,7 +94,7 @@ usage(void)
 	"    -n     Don't generate bitmaps as comments in .c file\n"
 	};
 
-	fprintf(stderr, help);
+	fprintf(stderr, "%s", help);
 }
 
 /* parse command line options*/
@@ -169,7 +171,7 @@ getopts(int *pac, char ***pav)
 
 /* remove directory prefix and file suffix from full path*/
 char *
-basename(char *path)
+base_name(char *path)
 {
 	char *p, *b;
 	static char base[256];
@@ -202,7 +204,7 @@ convbdf(char *path)
 
 	if (gen_c) {
 		if (!oflag) {
-			strcpy(outfile, basename(path));
+			strcpy(outfile, base_name(path));
 			strcat(outfile, ".c");
 		}
 		ret |= gen_c_source(pf, outfile);
@@ -210,7 +212,7 @@ convbdf(char *path)
 
 	if (gen_fnt) {
 		if (!oflag) {
-			strcpy(outfile, basename(path));
+			strcpy(outfile, base_name(path));
 			strcat(outfile, ".fnt");
 		}
 		ret |= gen_fnt_file(pf, outfile);
@@ -283,7 +285,7 @@ bdf_read_font(char *path)
 	if (!pf)
 		goto errout;
 	
-	pf->name = strdup(basename(path));
+	pf->name = strdup(base_name(path));
 
 	if (!bdf_read_header(fp, pf)) {
 		fprintf(stderr, "Error reading font header\n");
@@ -335,7 +337,8 @@ bdf_read_header(FILE *fp, PMWCFONT pf)
 			continue;
 		}
 		if (isprefix(buf, "COPYRIGHT ")) {	/* not required*/
-			if (sscanf(buf, "COPYRIGHT \"%[^\"]", copyright) != 1) {
+/*			if (sscanf(buf, "COPYRIGHT \"%[^\"]", copyright) != 1) {*/
+            if (sscanf(buf, "COPYRIGHT \"%s\"", copyright) != 1) {
 				fprintf(stderr, "Error: bad 'COPYRIGHT'\n");
 				return 0;
 			}
@@ -425,7 +428,7 @@ bdf_read_header(FILE *fp, PMWCFONT pf)
 
 	/* allocate bits, offset, and width arrays*/
 	pf->bits = (MWIMAGEBITS *)malloc(pf->bits_size * sizeof(MWIMAGEBITS) + EXTRA);
-	pf->offset = (unsigned long *)malloc(pf->size * sizeof(unsigned long));
+	pf->offset = (uint32_t *)malloc(pf->size * sizeof(uint32_t));
 	pf->width = (unsigned char *)malloc(pf->size * sizeof(unsigned char));
 	
 	if (!pf->bits || !pf->offset || !pf->width) {
@@ -440,13 +443,13 @@ bdf_read_header(FILE *fp, PMWCFONT pf)
 int
 bdf_read_bitmaps(FILE *fp, PMWCFONT pf)
 {
-	long ofs = 0;
+	int32_t ofs = 0;
 	int maxwidth = 0;
 	int i, k, encoding, width;
 	int bbw, bbh, bbx, bby;
 	int proportional = 0;
 	int encodetable = 0;
-	long l;
+	int32_t l;
 	char buf[256];
 
 	/* reset file pointer*/
@@ -499,7 +502,7 @@ bdf_read_bitmaps(FILE *fp, PMWCFONT pf)
 				continue;
 
 			/* set bits offset in encode map*/
-			if (pf->offset[encoding-pf->firstchar] != (unsigned long)-1) {
+			if (pf->offset[encoding-pf->firstchar] != (uint32_t)-1) {
 				fprintf(stderr, "Error: duplicate encoding for character %d (0x%02x), ignoring duplicate\n",
 					encoding, encoding);
 				continue;
@@ -575,7 +578,7 @@ bdf_read_bitmaps(FILE *fp, PMWCFONT pf)
 	for (i=0; i<pf->size; ++i) {
 		int defchar = pf->defaultchar - pf->firstchar;
 
-		if (pf->offset[i] == (unsigned long)-1) {
+		if (pf->offset[i] == (uint32_t)-1) {
 			pf->offset[i] = pf->offset[defchar];
 			pf->width[i] = pf->width[defchar];
 		}
@@ -702,7 +705,7 @@ gen_c_source(PMWCFONT pf, char *path)
 		"*/\n"
 		"\n"
 		"/* Font character bitmap data. */\n"
-		"static MWIMAGEBITS _%s_bits[] = {\n"
+		"static const MWIMAGEBITS _%s_bits[] = {\n"
 	};
 
 	ofp = fopen(path, "w");
@@ -796,18 +799,18 @@ gen_c_source(PMWCFONT pf, char *path)
 	if (pf->offset) {
 		/* output offset table*/
 		fprintf(ofp, "/* Character->glyph mapping. */\n"
-			"static unsigned long _%s_offset[] = {\n",
+			"static const uint32_t _%s_offset[] = {\n",
 			pf->name);
 
 		for (i=0; i<pf->size; ++i)
-			fprintf(ofp, "  %ld,\t/* (0x%02x) */\n", pf->offset[i], i+pf->firstchar);
+			fprintf(ofp, "  %u,\t/* (0x%02x) */\n", pf->offset[i], i+pf->firstchar);
 		fprintf(ofp, "};\n\n");
 	}
 
 	/* output width table for proportional fonts*/
 	if (pf->width) {
 		fprintf(ofp, 	"/* Character width data. */\n"
-			"static unsigned char _%s_width[] = {\n",
+			"static const unsigned char _%s_width[] = {\n",
 			pf->name);
 
 		for (i=0; i<pf->size; ++i)
@@ -823,7 +826,7 @@ gen_c_source(PMWCFONT pf, char *path)
 		sprintf(buf, "_%s_width,", pf->name);
 	else sprintf(buf, "0,  /* fixed width*/");
 	fprintf(ofp, 	"/* Exported structure definition. */\n"
-		"MWCFONT font_%s = {\n"
+		"const MWCFONT font_%s = {\n"
 		"  \"%s\",\n"
 		"  %d,\n"
 		"  %d,\n"
@@ -864,7 +867,7 @@ WRITESHORT(FILE *fp, unsigned short s)
 }
 
 static int
-WRITELONG(FILE *fp, unsigned long l)
+WRITELONG(FILE *fp, uint32_t l)
 {
 	putc(l, fp);
 	putc(l>>8, fp);

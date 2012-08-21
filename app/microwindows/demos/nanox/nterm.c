@@ -94,14 +94,14 @@ int start(int argc, char ** argv)
 
 	GrSetGCForeground(gc1, GRAY);
 	GrSetGCBackground(gc1, LTBLUE);
-	GrSetGCFont(gc1, GrCreateFont(GR_FONT_SYSTEM_FIXED, 0, NULL));
-	//font = GrCreateFont(GR_FONT_SYSTEM_VAR, 0, NULL);
+	GrSetGCFont(gc1, GrCreateFontEx((GR_CHAR*)GR_FONT_SYSTEM_FIXED, 0, 0, NULL));
+	//font = GrCreateFontEx(GR_FONT_SYSTEM_VAR, 0, 0, NULL);
 	//GrSetGCFont(gc1, font);
 	//GrSetGCForeground(gc1, GrGetSysColor(GR_COLOR_APPTEXT));
 	//GrSetGCUseBackground(gc1, GR_FALSE);
 
 
-	/*GrSetGCFont(gc1, GrCreateFont(GR_FONT_OEM_FIXED, 0, NULL));*/
+	/*GrSetGCFont(gc1, GrCreateFontEx(GR_FONT_OEM_FIXED, 0, 0, NULL));*/
 	GrSetGCForeground(gc3, WHITE);
 	GrSetGCBackground(gc3, BLACK);
 

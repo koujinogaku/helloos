@@ -321,19 +321,26 @@ int page_fault_proc( Excinfo *info )
   void *pgd;
   char s[16];
 
-  if( info->errcode&PAGE_TYPE_PRESENT ) {
-    console_puts("*** page is not present ***\n");
+  if( info->errcode&PAGE_ERR_PROTECT ) {
+    console_puts("*** page is ");
+    if(info->errcode&PAGE_ERR_WRITE)
+      console_puts("write");
+    else
+      console_puts("read");
+    console_puts("-protected running on ");
+    if(info->errcode&PAGE_ERR_USER)
+      console_puts("user");
+    else
+      console_puts("supervisor");
+    console_puts("-mode ***\n");
     return -1;
   }
-  //if( (info->errcode&PAGE_TYPE_USER)==PAGE_TYPE_SUPER )  {
-  //  console_puts("*** page is supper user ***\n");
   //  console_puts("pgd(cr3)=");
   //  pgd=page_get_pgd();
   //  long2hex((unsigned long)pgd,s);
   //  console_puts(s);
   //  console_puts("\n");
   //  return -1;
-  //}
 
   vpage = (unsigned int)page_get_faultaddr();
 
@@ -341,7 +348,12 @@ int page_fault_proc( Excinfo *info )
     console_puts("*** vpage is out of range. address=");
     long2hex(vpage,s);
     console_puts(s);
-    console_puts("\n");
+    console_puts(" running on ");
+    if(info->errcode&PAGE_ERR_USER)
+      console_puts("user");
+    else
+      console_puts("supervisor");
+    console_puts("-mode ***\n");
     return -1;
   }
 

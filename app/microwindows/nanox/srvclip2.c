@@ -1,8 +1,6 @@
 /*
  * Copyright (c) 2000 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * DYNAMICREGIONS GsSetClipWindow
  */
@@ -136,17 +134,21 @@ GsSetClipWindow(GR_WINDOW *wp, MWCLIPREGION *userregion, int flags)
 			maxx = sibwp->x + sibwp->width + bs;
 			maxy = sibwp->y + sibwp->height + bs;
 
-			GdSetRectRegion(r, minx, miny, maxx, maxy);
-			GdSubtractRegion(vis, vis, r);
-			/* FIXME: shaped windows with borders won't work */
 			if (sibwp->clipregion) {
+				MWCLIPREGION *shapeR = GdAllocRegion();
+				GdSetRectRegion(shapeR, minx, miny, maxx, maxy);
+				
 				/* FIXME: can user set invalid clipregion here? */
-				GdOffsetRegion(sibwp->clipregion,
-					sibwp->x, sibwp->y);
-				GdSubtractRegion(vis, vis, sibwp->clipregion);
-				GdOffsetRegion(sibwp->clipregion,
-					-sibwp->x, -sibwp->y);
-			}
+				GdOffsetRegion(sibwp->clipregion, sibwp->x, sibwp->y);
+				GdIntersectRegion(shapeR, shapeR, sibwp->clipregion);
+				GdOffsetRegion(sibwp->clipregion, -sibwp->x, -sibwp->y);
+				
+				GdSubtractRegion(vis, vis, shapeR);
+				GdDestroyRegion(shapeR);
+			} else {
+				GdSetRectRegion(r, minx, miny, maxx, maxy);
+				GdSubtractRegion(vis, vis, r);
+			}			
 		}
 
 		/* if not clipping the root window, stop when you reach it*/
