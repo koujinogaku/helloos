@@ -7232,7 +7232,7 @@ MWCFONT font_X6x13 = {
   0,
   256,
   _X6x13_bits,
-  _X6x13_offset,
+  (uint32_t *)_X6x13_offset,
   0,  /* fixed width*/
   0,
   sizeof(_X6x13_bits)/sizeof(MWIMAGEBITS),

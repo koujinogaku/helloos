@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "vesa.h"
+#include "kmem.h"
 
 #include "console.h"
 #include "cpu.h"
@@ -85,6 +86,10 @@ struct bios_info *kernel_get_bios_info_addr(void)
   return &bios_info;
 }
 
+
+//#pragma GCC push_options
+//#pragma GCC optimize("O0")
+
 void start(void)
 {
   int r;
@@ -98,31 +103,56 @@ void start(void)
 //  void *useraddr,*tstpgd;
 //  char *pbad;
 //    int exitcode;
-
-  memcpy((char *)&bios_info,(char *)CFG_MEM_TMPBIOSINFO,sizeof(struct bios_info));
-  memcpy((char *)&vesa_info,(char *)CFG_MEM_TMPVESAINFO,512);
+  struct bios_info **biosinfopp = (void *)CFG_MEM_TMPBIOSINFOPTR;
+  memcpy((char *)&bios_info,*biosinfopp,sizeof(struct bios_info));
+  memcpy((char *)&vesa_info,(void *)(bios_info.vesainfo),512);
   vesa_info_table = (vbe_info_t *)&vesa_info;
   vesa_mode_info_table = (mode_info_t *)(((unsigned long)&vesa_info)+16);
 
   console_setup(&bios_info);
 
+  console_puts("Initializing GDT/IDT ...");
   desc_init_gdtidt();
+  console_puts("done.\n");
+  console_puts("Initializing Exception Manager ...");
   exception_init();
+  console_puts("done.\n");
+  console_puts("Initializing Memory Manager ...");
   mem_init();
+  console_puts("done.\n");
+  console_puts("Initializing Page Manager ...");
   page_init();
+  console_puts("done.\n");
 
+  console_puts("Initializing Shared Memory Manager ...");
   shm_init();
+  console_puts("done.\n");
+  console_puts("Initializing Task Manager ...");
   task_init();
+  console_puts("done.\n");
+  console_puts("Initializing Queue Manager ...");
   queue_init();
+  console_puts("done.\n");
+  console_puts("Initializing Alarm Manager ...");
   alarm_init();
+  console_puts("done.\n");
+  console_puts("Initializing PIC Manager ...");
   pic_init();
+  console_puts("done.\n");
+  console_puts("Initializing Timer ...");
   timer_init();
+  console_puts("done.\n");
+  console_puts("Initializing System Call ...");
   syscall_init();
+  console_puts("done.\n");
+  console_puts("Initializing FPU ...");
   fpu_init();
+  console_puts("done.\n");
 
   cpu_unlock();
 
   timer_enable();
+  console_puts("Start Multi Processing\n");
 
   kernel_queid = queue_create(MSG_QNM_KERNEL);
   if(kernel_queid<0) {
@@ -271,7 +301,7 @@ void start(void)
   int2dec(bios_info.depth,s);
   console_puts(s);
   console_puts(" vram=");
-  long2hex(bios_info.vram,s);
+  long2hex((unsigned long)bios_info.vram,s);
   console_puts(s);
   console_puts("h scrnx=");
   int2dec(bios_info.scrnx,s);
@@ -377,3 +407,4 @@ void start(void)
   }
 
 }
+//#pragma GCC pop_options

@@ -46,9 +46,11 @@ enum {
 
 /* definition MSR */
 #define FDC_MRQ_READY    0x80
-#define FDC_DIO_TO_CPU   0x40
+#define FDC_DIO_READ     0x40
+#define FDC_DIO_WRITE    0x00
 #define FDC_NDMA_NOT_DMA 0x20
-#define FDC_BUSY_ACTIVE  0x10
+#define FDC_FDC_BUSY     0x10
+#define FDC_FDC_IDLE     0x00
 #define FDC_ACTD_ACTIVE  0x08
 #define FDC_ACTC_ACTIVE  0x04
 #define FDC_ACTB_ACTIVE  0x02
@@ -204,11 +206,12 @@ fdc_wait_stat(byte mask, byte stat)
 }
 
 static int
-fdc_receive( byte *data, int count )
+fdc_recv_result( byte *data, int count )
 {
   int i;
+
   for( i = 0 ; i < count ; i++ ){
-    if(fdc_wait_stat(FDC_MRQ_READY|FDC_DIO_TO_CPU, FDC_MRQ_READY|FDC_DIO_TO_CPU)<0)
+    if(fdc_wait_stat(FDC_MRQ_READY|FDC_DIO_READ, FDC_MRQ_READY|FDC_DIO_READ)<0)
       return ERRNO_TIMEOUT; // timeout
     data[i] = cpu_in8(FDC_PRI_IOR);
   }
@@ -216,11 +219,15 @@ fdc_receive( byte *data, int count )
 }
 
 static int
-fdc_send( byte *data, int count )
+fdc_send_cmd( byte *data, int count )
 {
   int i;
+
+  if(fdc_wait_stat(FDC_FDC_BUSY, FDC_FDC_IDLE)<0)
+    return ERRNO_TIMEOUT; // timeout
+
   for( i = 0 ; i < count ; i++ ){
-    if(fdc_wait_stat(FDC_MRQ_READY|FDC_DIO_TO_CPU, FDC_MRQ_READY)<0)
+    if(fdc_wait_stat(FDC_MRQ_READY|FDC_DIO_READ, FDC_MRQ_READY|FDC_DIO_WRITE)<0)
       return ERRNO_TIMEOUT; // timeout
     cpu_out8(FDC_PRI_IOR, data[i]);
   }
@@ -314,24 +321,24 @@ fdc_wait_sense_intr_stat( byte *stat )
   if( (r=fdc_wait_intr())<0 )
     return r;
 
-  if( (r=fdc_send(cmd, sizeof(cmd)))<0 )
+  if( (r=fdc_send_cmd(cmd, sizeof(cmd)))<0 )
     return r;
 
-  if( (r=fdc_receive(stat,2))<0 )
+  if( (r=fdc_recv_result(stat,2))<0 )
     return r;
 
   return 0; // success
 }
 
 static int
-fdc_wait_receive_result( byte *result )
+fdc_wait_recv_result( byte *result )
 {
   int r;
 
   if( (r=fdc_wait_intr())<0 )
     return r;
 
-  if( (r=fdc_receive(result,7))<0 )
+  if( (r=fdc_recv_result(result,7))<0 )
     return r;
 
   return 0; // success
@@ -372,7 +379,7 @@ fdc_cmd_seek( byte drive, byte head, byte cylinder )
   cmd[0] = FDC_CMD_SEEK;
   cmd[1] = (head << 2) | drive;
   cmd[2] = cylinder;
-  if( (r=fdc_send(cmd, sizeof(cmd)))<0 )
+  if( (r=fdc_send_cmd(cmd, sizeof(cmd)))<0 )
     return r;
 
   if( (r=fdc_wait_sense_intr_stat(stat))<0 )
@@ -407,7 +414,7 @@ fdc_cmd_recalibrate( byte drive )
   cmd[0] = FDC_CMD_RECALIBRATE;
   cmd[1] = drive;
 
-  if( (r=fdc_send(cmd,sizeof(cmd)))<0 )
+  if( (r=fdc_send_cmd(cmd,sizeof(cmd)))<0 )
     return r;
   
   if( (r=fdc_wait_sense_intr_stat(stat))<0 )
@@ -428,10 +435,10 @@ fdc_cmd_write_data( byte drive, byte head, byte cylinder, byte sector )
   
   fdc_set_stdcmd(cmd, FDC_CMD_WRITE_DATA,
                  drive, head, cylinder, sector );
-  if( (r=fdc_send(cmd,sizeof(cmd)))<0 )
+  if( (r=fdc_send_cmd(cmd,sizeof(cmd)))<0 )
     return r;
 
-  if( (r=fdc_wait_receive_result(result))<0 )
+  if( (r=fdc_wait_recv_result(result))<0 )
     return r;
 
   if( (result[0] & 0xc3) != (0x00 | drive) ) // Status Register IC=00 SE=1 DS=drive
@@ -448,10 +455,10 @@ fdc_cmd_read_data( byte drive, byte head, byte cylinder, byte sector )
 
   fdc_set_stdcmd(cmd, FDC_CMD_READ_DATA,
                  drive, head, cylinder, sector);
-  if( (r=fdc_send(cmd,sizeof(cmd)))<0 )
+  if( (r=fdc_send_cmd(cmd,sizeof(cmd)))<0 )
     return r;
 
-  if( (r=fdc_wait_receive_result(result))<0 )
+  if( (r=fdc_wait_recv_result(result))<0 )
     return r;
 /*
     console_puts("fdc_cmd_read_result ST0=");
@@ -525,7 +532,7 @@ floppy_init( void )
     fdc_motor_on(i);
 
   /* specify */
-  if( (r=fdc_send(cmd,sizeof(cmd)))<0 )
+  if( (r=fdc_send_cmd(cmd,sizeof(cmd)))<0 )
     return r;
 
   for(i=0;i<FDC_NUM_DRIVE;i++)

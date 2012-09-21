@@ -14,11 +14,10 @@ typedef int		bool;
 
 #define CFG_MEM_SETUP		0x1000
 #define CFG_MEM_PAGEWINDOW	0x1000
-#define CFG_MEM_BIOSINFO	(CFG_MEM_SETUP-sizeof(struct bios_info))
 #define CFG_MEM_TMPGDT		0x4000
 #define CFG_MEM_TMPGDTNUM	4
-#define CFG_MEM_TMPBIOSINFO	(CFG_MEM_TMPGDT+(CFG_MEM_TMPGDTNUM*8))
-#define CFG_MEM_TMPVESAINFO	(CFG_MEM_TMPBIOSINFO+sizeof(struct bios_info))
+#define CFG_MEM_TMPBIOSINFOPTR	(CFG_MEM_TMPGDT+(CFG_MEM_TMPGDTNUM*8))
+#define CFG_MEM_TMPVESAINFO	(CFG_MEM_TMPBIOSINFOPTR+sizeof(void *))
 #define CFG_MEM_TMPVESAMODEINFO	(CFG_MEM_TMPVESAINFO+16)
 #define CFG_MEM_START		0x7c00
 #define CFG_MEM_IPLINFO		480
@@ -61,12 +60,5 @@ typedef int		bool;
 #define CFG_MEM_USERSTACKTOP    (CFG_MEM_USERHEAPMAX+4096)
 */
 
-struct bios_info {
-  word16   vmode;     /* Video Mode */
-  word16   depth;     /* num of bit in 1dot */
-  word32   vram;      /* video frame physical address */
-  word16   scrnx;     /* video X size */
-  word16   scrny;     /* video Y size */
-};
 
 #endif /* CONFIG_H */

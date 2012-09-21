@@ -13,5 +13,6 @@
 #define ERRNO_MODE       -10
 #define ERRNO_OVER       -11
 #define ERRNO_CTRLBLOCK  -12
+#define ERRNO_DEVICE     -13
 
 #endif

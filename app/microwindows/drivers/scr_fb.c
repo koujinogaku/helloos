@@ -13,6 +13,7 @@
 #include "syscall.h"
 #include "string.h"
 #include "cpu.h"
+#include "kmem.h"
 #include "portunixstd.h"
 
 /****************/

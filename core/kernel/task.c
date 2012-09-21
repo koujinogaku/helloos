@@ -65,6 +65,8 @@ static struct TASK *tasktbl=0;
 static unsigned short task_real_taskid=0;
 //static char s[64];
 
+//#pragma GCC push_options
+//#pragma GCC optimize("O0")
 
 void task_idle_process(void)
 {
@@ -95,6 +97,7 @@ void task_idle_process(void)
 */
   }
 }
+//#pragma GCC pop_options
 
 int task_init(void)
 {
@@ -485,9 +488,12 @@ unsigned long task_get_tick(int taskid)
   return task_cur->tick;
 }
 
+//#pragma GCC push_options
+//#pragma GCC optimize("O0")
+
 void task_dispatch(void)
 {
-  struct TASK *task_cur, *task_prev;
+  struct TASK *task_cur;//, *task_prev;
 //  struct TASK *task_prev_n, *task_prev_p;
   struct desc_seg *gdt;
   int hold_locked;
@@ -513,7 +519,8 @@ task_dbg_task(tasktbl);
 }
 */
 
-  task_prev = task_cur = tasktbl->next;
+  //task_prev = 
+  task_cur = tasktbl->next;
 //  task_prev_n = task_prev->next; task_prev_p = task_prev->prev; 
 /*
 {static int n=0;
@@ -611,4 +618,5 @@ console_puts("HELLO OUT!!\n");
   for(;;);
 */
 }
+//#pragma GCC pop_options
 

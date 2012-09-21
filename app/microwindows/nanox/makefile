@@ -6,13 +6,13 @@ LD=$(TS)-ld
 AR=$(TS)-ar
 OBJDUMP=$(TS)-objdump
 CC=$(TS)-gcc
-CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(WININC)
+CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(WININC) -fno-strict-aliasing
 LSFILE=../../../core/library/appl.ls
 STDLIBDIR=../../../core/library
 STARTOBJ=$(STDLIBDIR)/startappl.o
 APPLIB=$(STDLIBDIR)/libappl.a
 
-OBJSCLI=client.o nxproto.o error.o nxutil.o nxtransform.o nxdraw.o #clientfb.o 
+OBJSCLI=client.o nxproto.o error.o nxutil.o nxdraw.o #nxtransform.o clientfb.o 
 OBJSSRV=srvmain.o srvclip.o srvevent.o srvfunc.o srvutil.o srvnet.o
 LIBCLI=../lib/libmwnanox.a
 LIBDRIVERS=../lib/libmwdrivers.a

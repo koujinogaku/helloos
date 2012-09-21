@@ -11,6 +11,9 @@
 #include "errno.h"
 #include "kernel.h"
 
+#pragma GCC push_options
+#pragma GCC optimize("O0")
+
 #define page_pgd_index(padr)	((padr)>>22)
 #define page_pte_index(padr)	(((padr)&0x003ff000)>>12)
 #define page_index2vaddr(pgdidx,pteidx) (((pgdidx)<<22)|((pteidx)<<12))
@@ -412,9 +415,9 @@ page_init(void)
   page_total_free_page=0;
   memsize = mem_get_totalsize();
 
-  if(mem_get_status()==0)
+  if(mem_get_status()==KMEMORY_STAT_NOTINIT)
     return ERRNO_NOTINIT;
-  if(mem_get_status()==1) // kernel heap is in low address
+  if(mem_get_status()==KMEMORY_STAT_LOWADDR) // kernel heap is in low address
     pageaddr=CFG_MEM_KERNELHEAP; 
   else                    // kernel heap is in high address
     pageaddr=CFG_MEM_PAGEPOOL;
@@ -444,7 +447,8 @@ page_init(void)
 
   page_set_pgd(page_system_pgd);
   page_paging_on();
-
+  console_set_virtual_addr_mode();
+ 
   return 0;
 }
 
@@ -511,7 +515,7 @@ page_create_pgd(void)
   if(pgd==NULL)
      return NULL;
   memset(pgd,0,PAGE_PAGESIZE);
-  if(mem_get_status()>=2)
+  if(mem_get_status()>=KMEMORY_STAT_HIGHADDR)
     kernelmax=CFG_MEM_KERNELMAX;
   else
     kernelmax=CFG_MEM_KERNELHEAP;
@@ -532,15 +536,9 @@ page_delete_pgd(void *ppgd)
   unsigned int dir_idx, tbl_idx;
   unsigned int pgd_item,pte_item;
   unsigned int *pgd=ppgd,*pte;
-  unsigned int kernelmax;
   unsigned int page_addr;
   struct bios_info *binfo;
   unsigned int vram_start,vram_end;
-
-  if(mem_get_status()>=2)
-    kernelmax=CFG_MEM_KERNELMAX;
-  else
-    kernelmax=CFG_MEM_KERNELHEAP;
 
   binfo = kernel_get_bios_info_addr();
   if(binfo->vmode < 0x100) { // TEXT or VGA MODE
@@ -732,7 +730,7 @@ int page_map_vga(void *pgd)
     vram_window_start = vram_start;
   }
   else {                      // VESA MODE
-    vram_start = binfo->vram;
+    vram_start = (unsigned int)(binfo->vram);
     vram_size  = binfo->scrnx * binfo->scrny;
     vram_window_start = CFG_MEM_VESAWINDOWSTART;
   }
@@ -746,3 +744,4 @@ int page_map_vga(void *pgd)
 
   return r;
 }
+#pragma GCC pop_options

@@ -6,7 +6,7 @@ LD=$(TS)-ld
 AR=$(TS)-ar
 OBJDUMP=$(TS)-objdump
 CC=$(TS)-gcc
-CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(WININC)
+CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I$(STDINC) -I$(WININC) -fno-strict-aliasing
 #CFLAGS0=-Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../.. -I../include
 OBJS= devarc.o devblit.o devclip.o devdraw.o devfont.o devimage.o devimage_stretch.o devkbd.o devlist.o devmouse.o devopen.o \
 devpal1.o devpal2.o devpal4.o devpal8.o devpoly.o devrgn2.o devrgn.o devstipple.o devtimer.o \

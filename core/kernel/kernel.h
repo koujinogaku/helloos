@@ -1,6 +1,8 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
+#include "kmem.h"
+
 #define KERNEL_MSGOPT_EXIT   0x01
 
 int kernel_get_bios_info(char *binfo);

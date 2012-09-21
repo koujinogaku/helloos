@@ -2,6 +2,8 @@
 #include "console.h"
 #include "cpu.h"
 #include "font_8x16.c"
+#include "string.h"
+#include "kmem.h"
 
 #define	VGA_DAC_WRITE_INDEX	0x3C8
 #define	VGA_DAC_DATA		0x3C9
@@ -24,6 +26,7 @@ static int console_graph_size_y = 0;
 static int console_pos = 0;
 static char console_attr = 0x07;
 static struct scrn_t *console_scrn = (void *)CFG_MEM_VGATEXT;
+static struct bios_info *binfo=0;
 
 static char g_pallet[3*256];
 
@@ -71,44 +74,6 @@ void console_init_pallet(char *pallet)
 	}
 }
 
-void console_setup(void *binfo)
-{
-  console_vmode = ((struct bios_info *)binfo)->vmode;
-  if(console_vmode==1) { // TEXT MODE
-    console_size_x = ((struct bios_info *)binfo)->scrnx;
-    if(console_size_x <= 0)
-      console_size_x = 1;
-    console_size_y = ((struct bios_info *)binfo)->scrny;
-    if(console_size_y <= 0)
-      console_size_y = 1;
-    console_scrn   = (void *)(((struct bios_info *)binfo)->vram);
-    console_size = console_size_x * console_size_y;
-    console_pos = 0;
-    console_attr = 0x0f;
-  }
-  else {                 // GRAPHICS MODE
-    console_graph_size_x = ((struct bios_info *)binfo)->scrnx;
-    if(console_graph_size_x <= 0)
-      console_graph_size_x = 1;
-    console_graph_size_y = ((struct bios_info *)binfo)->scrny;
-    if(console_graph_size_y <= 0)
-      console_graph_size_y = 1;
-
-    console_size_x = console_graph_size_x / 8;
-    console_size_y = console_graph_size_y / 16;
-
-    if(console_vmode < 0x100)  // VGA GRAPHICS
-      console_scrn   = (void *)(((struct bios_info *)binfo)->vram);  // Physical Address
-    else                       // VESA MODE
-      console_scrn = (void*)CFG_MEM_VESAWINDOWSTART;                 // Virtual  Address
-    console_size = console_size_x * console_size_y;
-    console_pos = 0;
-    console_attr = 0x07;
-
-    console_init_pallet(g_pallet);
-    console_write_pallet(0,255,g_pallet);
-  }
-}
 void console_putc(char chr)
 {
   int x,y,x_pos,y_pos;
@@ -215,3 +180,82 @@ void console_putpos(int pos)
   console_pos = pos;
 }
 
+void console_set_virtual_addr_mode(void)
+{
+  if(console_vmode < 0x100)  // VGA GRAPHICS
+    console_scrn   = (void *)(binfo->vram);  // Physical Address
+  else                       // VESA MODE
+    console_scrn = (void*)CFG_MEM_VESAWINDOWSTART;                 // Virtual  Address
+}
+
+void console_setup(void *binfov)
+{
+  unsigned char *c;
+  int x,y;
+  binfo = binfov;
+
+  console_vmode = binfo->vmode;
+  if(console_vmode==1) { // TEXT MODE
+    console_size_x = binfo->scrnx;
+    if(console_size_x <= 0)
+      console_size_x = 1;
+    console_size_y = binfo->scrny;
+    if(console_size_y <= 0)
+      console_size_y = 1;
+    console_scrn   = (void *)(binfo->vram);
+    console_size = console_size_x * console_size_y;
+    console_pos = 0;
+    console_attr = 0x0f;
+  }
+  else {                 // GRAPHICS MODE
+    console_graph_size_x = binfo->scrnx;
+    if(console_graph_size_x <= 0)
+      console_graph_size_x = 1;
+    console_graph_size_y = binfo->scrny;
+    if(console_graph_size_y <= 0)
+      console_graph_size_y = 1;
+
+    console_size_x = console_graph_size_x / 8;
+    console_size_y = console_graph_size_y / 16;
+
+    if(console_vmode < 0x100)  // VGA GRAPHICS
+      console_scrn   = (void *)(binfo->vram);  // Physical Address
+    else                       // VESA MODE
+      console_scrn   = (void *)(binfo->vram);  // Physical Address Mode until the Page Address Mode turn on.
+    console_size = console_size_x * console_size_y;
+    console_pos = 0;
+    console_attr = 0x07;
+
+    console_init_pallet(g_pallet);
+    console_write_pallet(0,255,g_pallet);
+  }
+
+  c = (unsigned char*)binfo->loaderscreen;
+  for(y=0;y<24;y++) {
+    for(x=0;x<80;x++) {
+      if((*c)>' ' && (*c)<='~') {
+        if(x<console_size_x && y<console_size_y) {
+          console_locatepos(x,y);
+          console_putc(*c);
+        }
+      }
+      c++;
+    }
+  }
+  console_locatepos(binfo->cursorx,binfo->cursory);
+/*
+  {
+  char s[16];
+  console_puts("x=");
+  int2dec(binfo->cursorx,s);
+  console_puts(s);
+  console_puts(" y=");
+  int2dec(binfo->cursory,s);
+  console_puts(s);
+  console_puts(" back=");
+  long2hex(binfo->loaderscreen,s);
+  console_puts(s);
+  console_puts("\n");
+  }
+*/
+}

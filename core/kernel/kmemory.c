@@ -16,7 +16,7 @@ struct mem_freelist {
 
 static struct mem_freelist memfreelist;
 //static int mem_alloc_mutex=0;
-static char mem_kmem_status=0;
+static char mem_kmem_status=KMEMORY_STAT_NOTINIT;
 static unsigned long mem_totalsize;
 static unsigned long mem_kernel_totalsize;
 
@@ -108,6 +108,9 @@ unsigned long mem_get_kernelfree(void)
   return size;
 }
 
+#pragma GCC push_options
+#pragma GCC optimize("O0")
+
 static inline void
 mem_cache_off(void)
 {
@@ -147,7 +150,7 @@ mem_set_eflags(unsigned int eflags)
     :"=m"(eflags));
 }
 
-unsigned int mem_peek(unsigned int addr)
+static inline unsigned int mem_peek(unsigned int addr)
 {
   unsigned int data;
 
@@ -156,7 +159,7 @@ unsigned int mem_peek(unsigned int addr)
       :"=eax"(data):"ebx"(addr));
   return data;
 }
-void mem_poke(unsigned int addr,unsigned int data)
+static inline void mem_poke(unsigned int addr,unsigned int data)
 {
   asm volatile(
       "movl %%eax, (%%ebx)\n"
@@ -209,6 +212,8 @@ mem_check_memsize(void)
 
   return adr;
 }
+#pragma GCC pop_options
+
 
 int mem_get_status(void)
 {
@@ -232,13 +237,13 @@ void mem_init(void)
   if(mem_totalsize>(CFG_MEM_KERNELHEAP+CFG_MEM_KERNELHEAPSZ)) {
     /* pool under 8MB */
     mem_free((void*)CFG_MEM_KERNELHEAP , CFG_MEM_KERNELHEAPSZ );
-    mem_kmem_status=2;
+    mem_kmem_status=KMEMORY_STAT_HIGHADDR;
     mem_kernel_totalsize=CFG_MEM_KERNELHEAPSZ;
   }
   else {
     /* pool under 640KB */
     mem_free((void*)CFG_MEM_KERNELHEAP2, CFG_MEM_KERNELHEAP2SZ);
-    mem_kmem_status=1;
+    mem_kmem_status=KMEMORY_STAT_LOWADDR;
     mem_kernel_totalsize=CFG_MEM_KERNELHEAP2SZ;
   }
 }

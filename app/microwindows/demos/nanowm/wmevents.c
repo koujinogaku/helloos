@@ -4,7 +4,7 @@
  * Copyright (C) 2000, 2003, 2010 Greg Haerr <greg@censoft.com>
  * Copyright (C) 2000 Alex Holden <alex@linuxhacker.org>
  */
-#include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include "nano-X.h"
 #include "nanowm.h"

@@ -98,7 +98,7 @@ fbportrait_drawarea_alphacol(PSD dstpsd, driver_gc_t *gc)
 {
 	ADDR8 alpha_in, alpha_out;
 	MWCOORD	in_x, in_y, in_w, in_h;
-	MWCOORD	out_x, out_y, out_w, out_h;
+	MWCOORD	out_x, out_y, out_w;//, out_h;
 	driver_gc_t	l_gc;
 
 	/* create new gc with rotated coords*/
@@ -126,7 +126,7 @@ fbportrait_drawarea_alphacol(PSD dstpsd, driver_gc_t *gc)
 
 	alpha_out = l_gc.data;
 	out_w = l_gc.width;
-	out_h = l_gc.height;
+	//out_h = l_gc.height;
 
 	for (in_y = 0; in_y < in_h; in_y++) {
 		for (in_x = 0; in_x < in_w; in_x++) {
@@ -150,7 +150,7 @@ fbportrait_drawarea_bitmap_bytes_msb_first(PSD psd, driver_gc_t * gc)
 {
 	ADDR8 pixel_in, pixel_out;
 	MWCOORD	in_x, in_y, in_w, in_h;
-	MWCOORD	out_x, out_y, out_w, out_h;
+	MWCOORD	out_x, out_y, out_w;//, out_h;
 	driver_gc_t	l_gc;
 
 	/* create new gc with rotated coords*/
@@ -179,7 +179,7 @@ fbportrait_drawarea_bitmap_bytes_msb_first(PSD psd, driver_gc_t * gc)
 
 	pixel_out = l_gc.data;
 	out_w = l_gc.width;
-	out_h = l_gc.height;
+	//out_h = l_gc.height;
 
 	/* rotate_right_1bpp*/
 	for (in_y = 0; in_y < in_h; in_y++) {
@@ -205,7 +205,7 @@ fbportrait_drawarea_bitmap_bytes_lsb_first(PSD psd, driver_gc_t * gc)
 {
 	ADDR8 pixel_in, pixel_out;
 	MWCOORD	in_x, in_y, in_w, in_h;
-	MWCOORD	out_x, out_y, out_w, out_h;
+	MWCOORD	out_x, out_y, out_w;//, out_h;
 	driver_gc_t	l_gc;
 
 	/* create new gc with rotated coords*/
@@ -234,7 +234,7 @@ fbportrait_drawarea_bitmap_bytes_lsb_first(PSD psd, driver_gc_t * gc)
 
 	pixel_out = l_gc.data;
 	out_w = l_gc.width;
-	out_h = l_gc.height;
+	//out_h = l_gc.height;
 
 	/* rotate_right_1bpp*/
 	for (in_y = 0; in_y < in_h; in_y++) {

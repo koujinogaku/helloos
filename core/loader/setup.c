@@ -2,6 +2,8 @@
 ** setup.c --- kernel loader
 */
 
+#pragma GCC push_options
+#pragma GCC optimize("O0")
 /* startup code */
 asm(
 ".text				\n"
@@ -16,18 +18,28 @@ asm(
 "	call	setup_main	\n"
 "dead:	jmp	dead		\n"
 );
+#pragma GCC pop_options
 
 #include "config.h"
 #include "iplinfo.h"
 #include "desc.h"
 #include "vesa.h"
+#include "kmem.h"
 
 #define PIC0_IMR		0x0021
 #define PIC1_IMR		0x00a1
 
 #define IPL_SETUPBUFFSZ 256
 static unsigned char setup_buff[IPL_SETUPBUFFSZ+1];
+void jump_to_kernel(void);
 
+#define IPL_SCREENBUFSZ 2000
+static unsigned char screen_backup_buff[IPL_SCREENBUFSZ];
+
+static struct bios_info bios_info;
+
+#pragma GCC push_options
+#pragma GCC optimize("O0")
 /* cpu contorols */
 /* these are copied from "cpu.h" */
 inline byte
@@ -52,6 +64,7 @@ cpu_disable_nmi(void)
 {
   cpu_out8(0x70, 0x80);
 }
+#pragma GCC pop_options
 
 /* coping memory blocks */
 void *
@@ -121,14 +134,66 @@ setup_set_tmpgdt(void)
   asm volatile("lgdt %0"::"m"(gdtr));
 }
 
+#pragma GCC push_options
+#pragma GCC optimize("O0")
 /* display a string using the BIOS */
+static void
+bios_putc(const char c)
+{
+  asm volatile("int $0x10":: "a"(0x0e00 | (0xff & c)), "b"(7));
+}
 static void
 bios_puts(const char *str)
 {
   char c;
   while((c = *str++))
-  asm volatile("int $0x10":: "a"(0x0e00 | (0xff & c)), "b"(7));
+    bios_putc(c);
 }
+
+static void
+bios_getcursor(int *x, int *y)
+{
+  int curxy,page;
+
+  asm volatile("int $0x10": "=b"(page): "a"(0x0f00));
+//bios_puts("page=");
+//bios_putc(page+'0');
+  asm volatile("int $0x10": "=d"(curxy): "a"(0x0300), "b"(page));
+  *x =  curxy&0x00ff;
+  *y = (curxy>>8)&0x00ff;
+
+  //unsigned short *bios_work=(unsigned short *)((0x0040<<4)+(0x0050));
+  //*y = ((*bios_work)>>8)&0x00ff;
+  //*x = (*bios_work)&0x00ff;
+}
+static void
+bios_setcursor(int x, int y)
+{
+  int curxy,page;
+
+  asm volatile("int $0x10": "=b"(page): "a"(0x0f00));
+  curxy = x | (y<<8);
+  asm volatile("int $0x10":: "a"(0x0200), "b"(page), "d"(curxy));
+}
+static int
+bios_getscreen(int x, int y)
+{
+  int curxy,page,c;
+
+  asm volatile("int $0x10": "=b"(page): "a"(0x0f00));
+  curxy = x | (y<<8);
+  asm volatile("int $0x10":: "a"(0x0200), "b"(page), "d"(curxy));
+
+  asm volatile("int $0x10": "=a"(c): "a"(0x0800), "b"(page));
+
+  return c&0xff;
+}
+static void
+bios_setvideopage(int page)
+{
+  asm volatile("int $0x10":: "a"(0x0500), "b"(page));
+}
+
 #if 0
 /* get 64KB memory size */
 inline word16
@@ -162,7 +227,7 @@ bios_get_memsize(void)
 inline int
 bios_set_vesamode(int mode)
 {
-    struct bios_info *binfo = (void *)CFG_MEM_TMPBIOSINFO;
+    struct bios_info *binfo = &bios_info;
     word32 ret;
     unsigned int wd,ht,depth;
     unsigned long vram;
@@ -216,7 +281,7 @@ bios_set_vesamode(int mode)
     binfo->scrnx = wd;
     binfo->scrny = ht;
     binfo->depth = depth;
-    binfo->vram  = vram;
+    binfo->vram  = (void*)vram;
     mode |= 0x4000;
     asm volatile(
                  "mov %%ax,    %%di \n"
@@ -233,6 +298,36 @@ bios_set_vesamode(int mode)
 
     return 0;
 }
+#pragma GCC pop_options
+
+static void screen_backup(void)
+{
+  int x,y;
+  int i=0;
+
+  for(y=0;y<25;y++) {
+    for(x=0;x<80;x++) {
+      if(i>=IPL_SCREENBUFSZ)
+        break;
+      screen_backup_buff[i]=bios_getscreen(x,y);
+      i++;
+    }
+  }
+}
+static void screen_restore(void)
+{
+  int i;
+
+  bios_setcursor(0, 0);
+  for(i=0;i<IPL_SCREENBUFSZ-1;i++) {
+    if(screen_backup_buff[i]>=' ')
+      bios_putc(screen_backup_buff[i]);
+    else
+      bios_putc(' ');
+  }
+}
+
+
 /* set up video mode */
 // display_vmode
 // VGA_MODE_TEXT80x25         1
@@ -242,13 +337,13 @@ inline void
 bios_set_videomode(int mode)
 {
   int rc;
-  struct bios_info *binfo = (void *)CFG_MEM_TMPBIOSINFO;
+  struct bios_info *binfo = &bios_info;
   if(mode==1) {
     /* TEXT MODE */
     asm volatile("int $0x10":: "a"(0x0003));
     binfo->vmode=1; //VGA_MODE_TEXT80x25
     binfo->depth=16;
-    binfo->vram=CFG_MEM_VGATEXT;
+    binfo->vram=(void*)CFG_MEM_VGATEXT;
     binfo->scrnx=80;
     binfo->scrny=25;
   }
@@ -257,7 +352,7 @@ bios_set_videomode(int mode)
     asm volatile("int $0x10":: "a"(0x0013));
     binfo->vmode=3;  //VGA_MODE_GRAPH320x200x256
     binfo->depth=8;
-    binfo->vram=CFG_MEM_VGAGRAPHICS;
+    binfo->vram=(void*)CFG_MEM_VGAGRAPHICS;
     binfo->scrnx=320;
     binfo->scrny=200;
   }
@@ -268,7 +363,7 @@ bios_set_videomode(int mode)
       asm volatile("int $0x10":: "a"(0x0003));
       binfo->vmode=1; //VGA_MODE_TEXT80x25
       binfo->depth=rc;
-      binfo->vram=CFG_MEM_VGATEXT;
+      binfo->vram=(void*)CFG_MEM_VGATEXT;
       binfo->scrnx=80;
       binfo->scrny=25;
     }
@@ -361,8 +456,16 @@ word32
 setup_main(void)
 {
   static struct ipl_info iplinfo;
+  int scrx,scry;
+  struct bios_info *binfo = &bios_info;
+  struct bios_info **binfopp;
 
   memcpy(&iplinfo,(void*)(CFG_MEM_START+CFG_MEM_IPLINFO),sizeof(struct ipl_info));
+  binfopp = (void*)CFG_MEM_TMPBIOSINFOPTR;
+  *binfopp = &bios_info;
+  binfo = &bios_info;
+  binfo->vesainfo = (void*)CFG_MEM_TMPVESAINFO;
+  binfo->vesamodeinfo = (void*)CFG_MEM_TMPVESAMODEINFO;
 
   bios_puts("Loading:");
 
@@ -379,19 +482,46 @@ setup_main(void)
 
   setup_stop_floppy_motor();
 
+  bios_getcursor(&scrx,&scry);
+  screen_backup();
   // text=1 , vga320x200x8=3, vesa640x480x8=0x101, vesa800x600x8=0x103, vesa1024x768x8=0x105
-  bios_set_videomode(0x101);
+  bios_set_videomode(0x103);
+  //bios_set_videomode(0x1);
+  //bios_set_videomode(0x3);
+  //bios_set_videomode(0x101);
+  bios_setvideopage(0);
+  screen_restore();
+  bios_setcursor(scrx,scry);
 
+  //bios_puts("Enable A20\n\r");
   setup_enable_a20();
 
   /* disable all interrupts */
+//  bios_puts("Disable PIC\n\r");
   cpu_out8(PIC0_IMR, 0xff);
   cpu_out8(PIC1_IMR, 0xff);
+//  bios_puts("Disable NMI\n\r");
   cpu_disable_nmi();
   cpu_lock();
 
   setup_set_tmpgdt(); /* Make the Provisional GDT */
 
+  //bios_puts("Turn on Protection Enable bit\n\r");
+  bios_getcursor(&scrx,&scry);
+  binfo->cursorx = scrx;
+  binfo->cursory = scry;
+  binfo->loaderscreen=(void*)(&screen_backup_buff);
+
+  jump_to_kernel();
+load_error:
+  bios_puts("error");
+  return 0;
+}
+
+#pragma GCC push_options
+#pragma GCC optimize("O0")
+void jump_to_kernel(void)
+{
   /* turn on PE(Protection Enable) bit */
   asm("	mov	%cr0, %eax	\n"
       "	and	$0x7fffffff, %eax	\n" /* disable paging */
@@ -415,9 +545,5 @@ setup_main(void)
 
   /* activate kernel */
   asm volatile("ljmpl %0, %1"::"i"(DESC_SELECTOR(DESC_KERNEL_CODE)),"i"(CFG_MEM_KERNEL));
-
- load_error:
-  bios_puts("error");
-  return 0;
 }
-
+#pragma GCC pop_options

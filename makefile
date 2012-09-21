@@ -1,4 +1,4 @@
-TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out #$(TESTDIR)/tstdemox.out ##$(TESTDIR)/tstnanox.out #$(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
+TESTS= $(TESTDIR)/tst.out $(TESTDIR)/tst2.out $(TESTDIR)/tstata.out #$(TESTDIR)/tstdemox.out ##$(TESTDIR)/tstnanox.out #$(TESTDIR)/tstmouse.out #$(TESTDIR)/testmwin.out
 
 LOADERDIR=core/loader
 KERNELDIR=core/kernel
@@ -101,6 +101,9 @@ $(TESTDIR)/tst.out: $(STDLIB)
 
 $(TESTDIR)/tst2.out: $(STDLIB)
 	cd $(TESTDIR) && make tst2.out
+
+$(TESTDIR)/tstata.out: $(STDLIB)
+	cd $(TESTDIR) && make tstata.out
 
 $(MICROWINDIR)/make.touch: $(STDLIB)
 	cd $(MICROWINDIR) && make

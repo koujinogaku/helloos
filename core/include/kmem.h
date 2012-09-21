@@ -1,6 +1,19 @@
 #ifndef KMEM_H
 #define KMEM_H
 
+struct bios_info {
+  unsigned short vmode;     /* Video Mode */
+  unsigned short depth;     /* num of bit in 1dot */
+  void *vram;               /* video frame physical address */
+  unsigned short scrnx;     /* video X size */
+  unsigned short scrny;     /* video Y size */
+  unsigned short cursorx;   /* cursor X */
+  unsigned short cursory;   /* cursor Y */
+  void *loaderscreen;       /* backup of loader screen */
+  void *vesainfo;
+  void *vesamodeinfo;
+};
+
 struct kmem_program
 {
   unsigned short id;

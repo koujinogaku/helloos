@@ -6,6 +6,7 @@
 #include "errno.h"
 #include "environm.h"
 #include "font_8x16.c"
+#include "kmem.h"
 
 #define VGA_CRTC_INDEX		0x3D4		/* 0x3B4 */
 #define VGA_CRTC_DATA		0x3D5		/* 0x3B5 */

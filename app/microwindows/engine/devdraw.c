@@ -1245,7 +1245,7 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 	MWPIXELVAL savecolor;		/* saved foreground color */
 	MWBOOL dodraw;			/* TRUE if draw these points */
 	MWCOLORVAL rgbcolor = 0L;
-	int pixsize;
+	//int pixsize;
 	unsigned char r, g, b;
 
 	/* check for hw pixel format and low level driver drawarea call*/
@@ -1284,27 +1284,27 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 	/* Calculate size of packed pixels*/
 	switch(pixtype) {
 	case MWPF_RGB:
-		pixsize = sizeof(MWCOLORVAL);
+		//pixsize = sizeof(MWCOLORVAL);
 		break;
 	case MWPF_PIXELVAL:
-		pixsize = sizeof(MWPIXELVAL);
+		//pixsize = sizeof(MWPIXELVAL);
 		break;
 	case MWPF_PALETTE:
 	case MWPF_TRUECOLOR233:
 	case MWPF_TRUECOLOR332:
-		pixsize = sizeof(unsigned char);
+		//pixsize = sizeof(unsigned char);
 		break;
 	case MWPF_TRUECOLOR8888:
 	case MWPF_TRUECOLOR0888:
 	case MWPF_TRUECOLORABGR:
-		pixsize = sizeof(uint32_t);
+		//pixsize = sizeof(uint32_t);
 		break;
 	case MWPF_TRUECOLOR888:
-		pixsize = 3;
+		//pixsize = 3;
 		break;
 	case MWPF_TRUECOLOR565:
 	case MWPF_TRUECOLOR555:
-		pixsize = sizeof(unsigned short);
+		//pixsize = sizeof(unsigned short);
 		break;
 	default:
 		return;
