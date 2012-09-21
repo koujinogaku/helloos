@@ -55,6 +55,5 @@ System Requirements:
 
 Development Environment:
 - MinGW / msys
-- GCC 4.2.2 Terget: i386-elf
-..... I know, that is too old.
+- GCC 4.7.1 Terget: i386-elf
 
