@@ -156,10 +156,11 @@ void console_scroll(void)
   }
 }
 
-void console_puts(char *str)
+int console_puts(char *str)
 {
   for(;*str != 0;++str)
     console_putc(*str);
+  return 0;
 }
 
 void console_locatepos(int posx, int posy)

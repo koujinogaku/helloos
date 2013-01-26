@@ -11,6 +11,7 @@
 #include "console.h"
 #include "cpu.h"
 #include "desc.h"
+#include "intr.h"
 #include "exception.h"
 #include "page.h"
 #include "string.h"
@@ -113,6 +114,7 @@ void start(void)
 
   console_puts("Initializing GDT/IDT ...");
   desc_init_gdtidt();
+  intr_init();
   console_puts("done.\n");
   console_puts("Initializing Exception Manager ...");
   exception_init();
@@ -320,7 +322,7 @@ void start(void)
 
   for(;;) {
 
-    taskid=program_load("display.out",PGM_TYPE_IO|PGM_TYPE_VGA);
+    taskid=program_load("displayd.out",PGM_TYPE_IO|PGM_TYPE_VGA);
 
     if(taskid<0) {
       console_puts("display load error=");

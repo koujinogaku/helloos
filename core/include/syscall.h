@@ -55,6 +55,12 @@
 #define SYSCALL_FN_PGM_SETTASKQ  46
 #define SYSCALL_FN_PGM_GETTASKQ  47
 #define SYSCALL_FN_KRN_GET_SYSTIME 48
+#define SYSCALL_FN_PGM_GETEXITCODE 49
+#define SYSCALL_FN_PGM_GETARGS   50
+#define SYSCALL_FN_SHM_SETNAME   51
+#define SYSCALL_FN_SHM_LOOKUP    52
+#define SYSCALL_FN_PGM_ALLOCATE  53
+#define SYSCALL_FN_PGM_LOADIMAGE 54
 
 void syscall_init(void);
 
@@ -67,11 +73,13 @@ int syscall_puts(char *s);
 int syscall_exit(int c);
 int syscall_wait(int c);
 
-int syscall_shm_create(int shmid, int size);
+int syscall_shm_create(unsigned int shmname, unsigned long size);
+int syscall_shm_setname(int shmid, unsigned int shmname);
+int syscall_shm_lookup(unsigned int shmname);
 int syscall_shm_delete(int shmid);
-int syscall_shm_getsize(int shmid,int sizep);
-int syscall_shm_map(int shmid,int vmem);
-int syscall_shm_unmap(int shmid, int vmem);
+int syscall_shm_getsize(int shmid, unsigned long *sizep);
+int syscall_shm_map(int shmid, void *vmem);
+int syscall_shm_unmap(int shmid, void *vmem);
 
 int syscall_que_create(unsigned int quename);
 int syscall_que_setname(int queid, unsigned int quename);
@@ -92,11 +100,15 @@ int syscall_mtx_unlock(int *mutex);
 #define SYSCALL_PGM_TYPE_IO  0x00000001
 #define SYSCALL_PGM_TYPE_VGA 0x00000002
 int syscall_pgm_load(char *filename, int type);
+int syscall_pgm_allocate(char *name, int type, unsigned long size);
+int syscall_pgm_loadimage(int taskid, void *image, unsigned long size);
 int syscall_pgm_setargs(int taskid, char *args, int argsize);
+int syscall_pgm_getargs(int taskid, char *args, int argsize);
 int syscall_pgm_start(int taskid, int exitque);
 int syscall_pgm_delete(int taskid);
 int syscall_pgm_settaskq(int queid);
 int syscall_pgm_gettaskq(int taskid);
+int syscall_pgm_getexitcode(int taskid);
 int syscall_pgm_list(int start, int count, void *plist);
 
 #define SYSCALL_FILE_O_RDONLY 0x0001

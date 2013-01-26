@@ -14,11 +14,11 @@ int strncmp( void *dest, const void *src, unsigned int n );
 int strncmpi( void *dest, const void *src, unsigned int n );
 int strlen(const char *chr);
 
-void int2dec(unsigned int memsz, char *buff);
-void sint2dec(int num, char *str);
-void byte2hex(unsigned char num, char *str);
-void word2hex(unsigned short num, char *str);
-void long2hex(unsigned long num, char *str);
+char *int2dec(unsigned int memsz, char *buff);
+char *sint2dec(int num, char *str);
+char *byte2hex(unsigned char num, char *str);
+char *word2hex(unsigned short num, char *str);
+char *long2hex(unsigned long num, char *str);
 char numtohex1(char chr);
 char uppercase(char c);
 

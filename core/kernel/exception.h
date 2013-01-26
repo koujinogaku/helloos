@@ -4,13 +4,9 @@
 #ifndef EXCEPTION_H
 #define EXCEPTION_H
 
-typedef struct {
-  word32 gs, fs, es, ds, ss;		// push values of each register
-  word32 edi, esi, ebp, esp;		// pushad info
-  word32 ebx, edx, ecx, eax;		// ..
-  word32 errcode, eip, cs, eflags;	// exception info
-  word32 app_esp, app_ss;		// appl stack info.(if user mode)
-} Excinfo;
+#include <kmem.h>
+
+typedef struct kmem_except_reg Excinfo;
 
 #define EXCP_NO_DIV  0 // "Divide Error"
 #define EXCP_NO_DEB  1 // "Debug"
@@ -92,6 +88,6 @@ asm(\
 #define EXCP_ENTRY_EC( func )   ((unsigned int)func##_excp_ec)
 
 void exception_init(void);
-void excp_abort( Excinfo *i, int excpno, const char *msg );
+void excp_abort(Excinfo *i, int excpno);
 
 #endif /* EXCEPTION_H */

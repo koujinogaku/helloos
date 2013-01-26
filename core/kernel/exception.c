@@ -11,6 +11,8 @@
 #include "task.h"
 #include "syscall.h"
 #include "page.h"
+#include "excptdmp.h"
+#include "kmem.h"
 
 /*
 static void
@@ -82,127 +84,74 @@ static void excp_dump(int dmpadr,int start,int end)
 */
 
 void
-excp_abort( Excinfo *i, int excpno, const char *msg )
+excp_abort( Excinfo *i, int excpno)
 {
-  int r;
-  char s[10];
   //int esp;
+  struct kmem_except_info infobuf;
+  struct kmem_except_info *info;
+  unsigned long system_pgd =(unsigned long)page_get_system_pgd();
+  unsigned long current_pgd =(unsigned long)page_get_current_pgd();
 
-  console_puts("\n*** Exception: ");
-  console_puts((char*)msg);
-  console_puts(" *** \n");
-  console_puts("Task  taskid=");
-  long2hex(task_get_currentid(),s);
-  console_puts(s);
-  console_puts(" lastfunc=");
-  long2hex(task_get_lastfunc(),s);
-  console_puts(s);
-  console_puts(" cr0=");
-  asm volatile ("mov %%cr0, %%eax":"=a"(r):);
-  long2hex(r,s);
-  console_puts(s);
-
-  console_puts("\nInfo  eflags=");
-  long2hex(i->eflags,s); console_puts(s);
-  console_puts(" errcode =");
-  long2hex(i->errcode,s); console_puts(s);
-  if(excpno==EXCP_NO_PGF) {
-    console_puts(" cr2=");
-    long2hex((int)page_get_faultvaddr(),s); console_puts(s);
-    console_puts(" cr3=");
-    long2hex((int)page_get_current_pgd(),s); console_puts(s);
-  }
-  console_puts("\nInst. cs =");
-  long2hex(i->cs,s); console_puts(s);
-  console_puts(" eip=");
-  long2hex(i->eip,s); console_puts(s);
-  console_puts("\nStack ss =");
-  long2hex(i->ss,s); console_puts(s);
-  console_puts(" esp=");
-  long2hex(i->esp,s); console_puts(s);
-  console_puts(" ebp=");
-  long2hex(i->ebp,s); console_puts(s);
-  if((i->cs&0x07)!=0) {/* user code */
-    console_puts("\nAppl  ss =");
-    long2hex(i->app_ss,s); console_puts(s);
-    console_puts(" esp=");
-    long2hex(i->app_esp,s); console_puts(s);
-  }
-  console_puts("\nData  ds =");
-  long2hex(i->ds,s); console_puts(s);
-  console_puts(" es =");
-  long2hex(i->es,s); console_puts(s);
-  console_puts(" fs =");
-  long2hex(i->fs,s); console_puts(s);
-  console_puts(" gs =");
-  long2hex(i->gs,s); console_puts(s);
-  console_puts("\n      eax=");
-  long2hex(i->eax,s); console_puts(s);
-  console_puts(" ebx=");
-  long2hex(i->ebx,s); console_puts(s);
-  console_puts(" ecx=");
-  long2hex(i->ecx,s); console_puts(s);
-  console_puts(" edx=");
-  long2hex(i->edx,s); console_puts(s);
-  console_puts("\n      esi=");
-  long2hex(i->esi,s); console_puts(s);
-  console_puts(" edi=");
-  long2hex(i->edi,s); console_puts(s);
-  console_puts("\n");
-
-/*
-  console_puts("CODE  ");
-  excp_dump(i->eip,-8,8);
-
-  console_puts("STACK ");
-  if((i->cs&0x07)!=0)
-    esp=i->app_esp;
-  else
-    esp=i->esp;
-  excp_dump(esp,-40,24);
-*/
-
-//  if(task_get_currentid()==1)
-  if((i->cs&0x07)==0)
-  {/* kernel code */
-     console_puts("*** System Abort ***\n");
-     for(;;) cpu_halt();
+//  if((i->cs&0x07)==0)
+//  if(task_dispatch_status()==0 || task_get_currentid()==1)
+  if(system_pgd==0 || system_pgd==current_pgd)
+  {/* kernel task */
+    info=&infobuf;
   }
   else
   { /* user code */
-     console_puts("*** Exit User Process ***\n");
-     cpu_unlock();
-     task_exit(i->errcode);
-     for(;;) ;
+    info=(void*)CFG_MEM_USERARGUMENT;
   }
+
+  info->excpno = excpno;
+  info->cr0 = (unsigned long)page_get_mode();
+  info->cr2 = (unsigned long)page_get_faultvaddr();
+  info->cr3 = current_pgd;
+  info->taskid = task_get_currentid();
+  info->lastfunc = task_get_lastfunc();
+  memcpy(&(info->regs),i,sizeof(struct kmem_except_reg));
+
+//  if((i->cs&0x07)==0)
+//  if(task_dispatch_status()==0 || task_get_currentid()==1)
+  if(system_pgd==0 || system_pgd==current_pgd)
+  {/* kernel task */
+     exception_dump(info, console_puts);
+     console_puts("*** System Abort ***\n");
+     for(;;) cpu_halt();
+  }
+
+  /* user code */
+  cpu_unlock();
+  task_exit(excpno | 0x8000); // no return;
+  for(;;) ;
 }
 
-#define EXCEPTION_ABORT(func, no, msg)\
-  EXCP_EXCEPTION(func); void func( Excinfo info ){ excp_abort(&info, no, msg); }
+#define EXCEPTION_ABORT(func, no)\
+  EXCP_EXCEPTION(func); void func( Excinfo info ){ excp_abort(&info, no); }
 
-#define EXCEPTION_ABORT_EC(func, no, msg)\
-  EXCP_EXCEPTION_EC(func); void func( Excinfo info ){ excp_abort(&info, no, msg); }
+#define EXCEPTION_ABORT_EC(func, no)\
+  EXCP_EXCEPTION_EC(func); void func( Excinfo info ){ excp_abort(&info, no); }
 
-EXCEPTION_ABORT(excp_div, EXCP_NO_DIV, "Divide Error" );
-EXCEPTION_ABORT(excp_deb, EXCP_NO_DEB, "Debug" );
-EXCEPTION_ABORT(excp_nmi, EXCP_NO_NMI, "NMI Interrupt" );
-EXCEPTION_ABORT(excp_brk, EXCP_NO_BRK, "Breakpoint" );
-EXCEPTION_ABORT(excp_ovf, EXCP_NO_OVF, "Overflow" );
-EXCEPTION_ABORT(excp_ran, EXCP_NO_RAN, "BOUND Range Exceeded" );
-EXCEPTION_ABORT(excp_opc, EXCP_NO_OPC, "Undefined Opcode" );
-EXCEPTION_ABORT(excp_fpu, EXCP_NO_FPU, "No Math Coprocessor" );
-EXCEPTION_ABORT_EC( excp_dbl, EXCP_NO_DBL, "Double Fault" );
-EXCEPTION_ABORT(excp_cso, EXCP_NO_CSO, "Coprocessor Segment Overrun" );
-EXCEPTION_ABORT_EC( excp_tss, EXCP_NO_TSS, "Invalid TSS" );
-EXCEPTION_ABORT_EC( excp_seg, EXCP_NO_SEG, "Segment Not Present" );
-EXCEPTION_ABORT_EC( excp_stk, EXCP_NO_STK, "Stack-Segment Fault" );
-EXCEPTION_ABORT_EC( excp_pro, EXCP_NO_PRO, "General Protection" );
-EXCEPTION_ABORT_EC( excp_pgf, EXCP_NO_PGF, "Page Fault" );
-EXCEPTION_ABORT(excp_res, EXCP_NO_RES, "Reserved" );
-EXCEPTION_ABORT(excp_mth, EXCP_NO_MTH, "Math Fault" );
-EXCEPTION_ABORT(excp_agc, EXCP_NO_AGC, "Alignment Check" );
-EXCEPTION_ABORT(excp_mac, EXCP_NO_MAC, "Machine Check" );
-EXCEPTION_ABORT(excp_sim, EXCP_NO_SIM, "Streaming SIMD Extensions" );
+EXCEPTION_ABORT(excp_div, EXCP_NO_DIV);//, "Divide Error" );
+EXCEPTION_ABORT(excp_deb, EXCP_NO_DEB);//, "Debug" );
+EXCEPTION_ABORT(excp_nmi, EXCP_NO_NMI);//, "NMI Interrupt" );
+EXCEPTION_ABORT(excp_brk, EXCP_NO_BRK);//, "Breakpoint" );
+EXCEPTION_ABORT(excp_ovf, EXCP_NO_OVF);//, "Overflow" );
+EXCEPTION_ABORT(excp_ran, EXCP_NO_RAN);//, "BOUND Range Exceeded" );
+EXCEPTION_ABORT(excp_opc, EXCP_NO_OPC);//, "Undefined Opcode" );
+EXCEPTION_ABORT(excp_fpu, EXCP_NO_FPU);//, "No Math Coprocessor" );
+EXCEPTION_ABORT_EC( excp_dbl, EXCP_NO_DBL);//, "Double Fault" );
+EXCEPTION_ABORT(excp_cso, EXCP_NO_CSO);//, "Coprocessor Segment Overrun" );
+EXCEPTION_ABORT_EC( excp_tss, EXCP_NO_TSS);//, "Invalid TSS" );
+EXCEPTION_ABORT_EC( excp_seg, EXCP_NO_SEG);//, "Segment Not Present" );
+EXCEPTION_ABORT_EC( excp_stk, EXCP_NO_STK);//, "Stack-Segment Fault" );
+EXCEPTION_ABORT_EC( excp_pro, EXCP_NO_PRO);//, "General Protection" );
+EXCEPTION_ABORT_EC( excp_pgf, EXCP_NO_PGF);//, "Page Fault" );
+EXCEPTION_ABORT(excp_res, EXCP_NO_RES);//, "Reserved" );
+EXCEPTION_ABORT(excp_mth, EXCP_NO_MTH);//, "Math Fault" );
+EXCEPTION_ABORT(excp_agc, EXCP_NO_AGC);//, "Alignment Check" );
+EXCEPTION_ABORT(excp_mac, EXCP_NO_MAC);//, "Machine Check" );
+EXCEPTION_ABORT(excp_sim, EXCP_NO_SIM);//, "Streaming SIMD Extensions" );
 
 void
 exception_init(void)

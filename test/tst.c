@@ -55,97 +55,105 @@ void tst_console(void)
 //  cpu_halt();
 }
 
-#define SHRMEMNAME 1
-#define SHRMEMNAME2 2
+#define SHRMEMNAME 10000
+#define SHRMEMNAME2 10002
 #define SHRMEMADDR ((void *)0x7000000)
 #define SHRMEMHEAP ((void *)0x7000000)
 
 void tst_shm(void)
 {
   int r;
+  int shmid;
+  //int shmid2;
 /*
-  r=syscall_shm_create(SHRMEMNAME,64*1024+1);
+  shmid=syscall_shm_create(SHRMEMNAME,64*1024+1);
   display_puts("shm create=");
-  long2hex(r,s);
+  sint2dec(shmid,s);
   display_puts(s);
   display_puts("\n");
 */
-  r=syscall_shm_create(SHRMEMNAME,4);
+  shmid=syscall_shm_create(SHRMEMNAME,4);
   display_puts("shm create=");
-  long2hex(r,s);
+  sint2dec(shmid,s);
   display_puts(s);
 //  display_puts("\n");
 /*
-  r=syscall_shm_create(SHRMEMNAME2,64*1024);
+  shmid2=syscall_shm_create(SHRMEMNAME2,64*1024);
   display_puts("shm2 create=");
-  long2hex(r,s);
+  sint2dec(shmid2,s);
   display_puts(s);
   display_puts("\n");
 
-  r=syscall_shm_getsize(SHRMEMNAME,(int)&size);
+  r=syscall_shm_getsize(shmid,(int)&size);
   display_puts("shm getsize=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
   display_puts(",");
-  long2hex(size,s);
+  sint2dec(size,s);
   display_puts(s);
   display_puts("\n");
 
-  r=syscall_shm_getsize(SHRMEMNAME2,(int)&size);
+  r=syscall_shm_getsize(shmid2,(int)&size);
   display_puts("shm2 getsize=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
   display_puts(",");
-  long2hex(size,s);
+  sint2dec(size,s);
   display_puts(s);
   display_puts("\n");
 
   r=syscall_shm_create(SHRMEMNAME,4);
   display_puts("shm create=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
   display_puts("\n");
 
   r=syscall_shm_getsize(100,(int)&size);
   display_puts("shm getsize=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
   display_puts(",");
-  long2hex(size,s);
+  sint2dec(size,s);
   display_puts(s);
   display_puts("\n");
 */
 
-  r=syscall_shm_map(SHRMEMNAME,(unsigned int)SHRMEMADDR);
+  r=syscall_shm_map(shmid,(void*)SHRMEMADDR);
   display_puts(" shm map=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
 //  display_puts("\n");
+  display_puts(" shm flg=");
+  sint2dec(*((int*)SHRMEMADDR),s);
+  display_puts(s);
 
-  memcpy((void*)SHRMEMADDR,"ABCD",4);
   syscall_wait(1000);
+  memcpy((void*)(SHRMEMADDR+sizeof(int)),"ABCD",4);
+  syscall_mtx_unlock((int*)SHRMEMADDR);
 
-  r=syscall_shm_unmap(SHRMEMNAME,(unsigned int)SHRMEMADDR);
+  r=syscall_shm_unmap(shmid,(void*)SHRMEMADDR);
   display_puts(" shm unmap=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
 //  display_puts("\n");
 /*
   r=syscall_shm_create(SHRMEMNAME2,4*4096);
   display_puts("shm2 create=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
   display_puts("\n");
 */
-  r=syscall_shm_delete(SHRMEMNAME);
-  display_puts(" shm2 delete=");
-  long2hex(r,s);
-  display_puts(s);
-  display_puts("\n");
+  syscall_wait(100);
+
+//  r=syscall_shm_delete(shmid);
+//  display_puts(" shm delete=");
+//  sint2dec(r,s);
+//  display_puts(s);
+//  display_puts("\n");
 /*
   r=syscall_shm_create(SHRMEMNAME,4);
   display_puts("shm create=");
-  long2hex(r,s);
+  sint2dec(r,s);
   display_puts(s);
   display_puts("\n");
 */
@@ -153,30 +161,83 @@ void tst_shm(void)
 void tst_shm2(void)
 {
   int r;
+  int shmid;
+  int initflg;
+  char *mappaddr;
 
-  r=shm_create(SHRMEMNAME,4);
+  //shmid=shm_create(SHRMEMNAME,4);
+  shmid=shm_open(SHRMEMNAME,4,&initflg);
   display_puts("shm create=");
-  sint2dec(r,s);
+  sint2dec(shmid,s);
+  display_puts(s);
+  display_puts("shm initflg=");
+  sint2dec(initflg,s);
   display_puts(s);
 
-  r=shm_map(SHRMEMNAME,(char*)SHRMEMADDR);
+
+//  r=shm_map(shmid,(char*)SHRMEMADDR);
+  r=shm_bind(shmid,(unsigned long*)&mappaddr);
   display_puts(" shm map=");
   sint2dec(r,s);
   display_puts(s);
 
-  memcpy((void*)SHRMEMADDR,"ABCD",4);
-  syscall_wait(1000);
+  display_puts(" shm flg=");
+  sint2dec(*((int*)mappaddr),s);
+  display_puts(s);
 
-  r=shm_unmap(SHRMEMNAME);
+  display_puts(" shm adr=");
+  long2hex((int)mappaddr,s);
+  display_puts(s);
+
+  syscall_wait(1000);
+  if(initflg) {
+    memcpy((void*)((unsigned long)mappaddr+sizeof(int)),"ABCD",4);
+    syscall_mtx_unlock((int*)mappaddr);
+  }
+
+  r=shm_unmap(shmid);
   display_puts(" shm unmap=");
   sint2dec(r,s);
   display_puts(s);
 
-  r=shm_delete(SHRMEMNAME);
-  display_puts(" shm2 delete=");
+  syscall_wait(100);
+
+//  r=shm_delete(shmid);
+//  display_puts(" shm2 delete=");
+//  sint2dec(r,s);
+//  display_puts(s);
+//  display_puts("\n");
+
+
+//
+// =============================================
+//
+/*
+  //shmid=shm_create(SHRMEMNAME,4);
+  shmid=shm_open(SHRMEMNAME2,4,&initflg);
+  display_puts("shm create=");
+  sint2dec(shmid,s);
+  display_puts(s);
+  display_puts("shm initflg=");
+  sint2dec(initflg,s);
+  display_puts(s);
+
+
+//  r=shm_map(shmid,(char*)SHRMEMADDR);
+  r=shm_bind(shmid,(unsigned long*)&mappaddr);
+  display_puts(" shm map=");
   sint2dec(r,s);
   display_puts(s);
-  display_puts("\n");
+
+  display_puts(" shm flg=");
+  sint2dec(*((int*)mappaddr),s);
+  display_puts(s);
+
+  display_puts(" shm adr=");
+  long2hex((int)mappaddr,s);
+  display_puts(s);
+*/
+
 }
 
 
@@ -591,8 +652,9 @@ void tst_dsp(void)
 
 int tst_alarm(void)
 {
-  int i,rc;
-  int alarm;
+  int i;
+  //int rc;
+  //int alarm;
   struct msg_head selected_msg;
 
   for(i=0;i<10;i++) {
@@ -603,10 +665,10 @@ int tst_alarm(void)
 
   for(i=0;i<10;i++) {
     display_puts("*");
-    alarm = syscall_alarm_set(50,environment_getqueid(),0x00010000);
+    syscall_alarm_set(50,environment_getqueid(),0x00010000);
     selected_msg.size=sizeof(selected_msg);
-    rc=message_poll(MESSAGE_MODE_WAIT, 0, 0, &selected_msg);
-    rc=message_receive(MESSAGE_MODE_TRY, 0, 0, &selected_msg);
+    message_poll(MESSAGE_MODE_WAIT, 0, 0, &selected_msg);
+    message_receive(MESSAGE_MODE_TRY, 0, 0, &selected_msg);
   }
   display_puts("\n");
 
@@ -1244,7 +1306,7 @@ int start(int argc, char *argv[])
 //  tst_key();
 //  tst_data();
 //  tst_pgm();
-  tst_pagefault();
+//  tst_pagefault();
 //  tst_heap();
 //  tst_heap2();
 //  tst_dir();
@@ -1258,7 +1320,7 @@ int start(int argc, char *argv[])
 //  tst_shm();
 //  tst_shm2();
 //  tst_mutex();
-//  tst_bucket();
+  tst_bucket();
 //tst_fpu(2.9, 2);
 //tst_int(10.9);
 //tst_printdouble(100.0 , 8);

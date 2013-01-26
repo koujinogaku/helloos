@@ -215,7 +215,7 @@ int task_create(void *task_func)
   desc_set_tss32(&task_new->gdt, (int)&(task_new->tss), sizeof(task_new->tss)-1, DESC_DPL_SYSTEM);
 
   task_new->fpu = 0;
-  task_new->status = TASK_STAT_STOP;
+  task_new->status = TASK_STAT_PREPARATION;
   task_new->tick = 0;
 
   cpu_hold_unlock(hold_locked);
@@ -284,6 +284,12 @@ void *task_get_pgd(int taskid)
   task_cur = &(tasktbl[taskid]);
   return (void*)task_cur->tss.cr3;
 }
+int task_get_exitcode(int taskid)
+{
+  struct TASK *task_cur;
+  task_cur = &(tasktbl[taskid]);
+  return task_cur->exitcode;
+}
 
 void task_set_lastfunc( int lastfunc )
 {
@@ -334,6 +340,7 @@ void task_dbg_task(void *lst)
   task_dbg_dumplist(tasktbl);
 }
 
+
 int task_delete(int taskid)
 {
   struct TASK *task_cur;
@@ -368,7 +375,8 @@ void task_exit(int exitcode)
 
   cpu_hold_lock(hold_locked);
 
-  exitcode = exitcode & 0x7fff;
+  //exitcode = exitcode & 0x7fff;
+  // Bit15 is exception flag
 
   task_cur = tasktbl->next;
   taskid = task_cur->id;
@@ -472,6 +480,10 @@ void task_dispatch_start(void)
 void task_dispatch_stop(void)
 {
   task_dispatch_on=0;
+}
+int task_dispatch_status(void)
+{
+  return task_dispatch_on;
 }
 
 void task_tick(void)

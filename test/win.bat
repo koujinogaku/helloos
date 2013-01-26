@@ -1,5 +1,5 @@
 cls
-mouse &
+moused &
 nanox &
 nanowm &
 npanel

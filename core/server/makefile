@@ -14,24 +14,32 @@ DISPLAYOBJ= displaysrv.o
 KEYBOARDOBJ= keyboardsrv.o
 COMMANDOBJ= command.o
 MOUSEOBJ= mousesrv.o
+ATAOBJ= atasrv.o
+CDFSOBJ= cdfssrv.o
 
-all: display.out keyboard.out command.out mouse.out
+all: displayd.out keyboard.out command.out moused.out atad.out cdfsd.out
 
-display.out: $(DISPLAYOBJ)
+displayd.out: $(DISPLAYOBJ) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(DISPLAYOBJ) $(APPLIB) -o $@
 
-keyboard.out: $(KEYBOARDOBJ)
+keyboard.out: $(KEYBOARDOBJ) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(KEYBOARDOBJ) $(APPLIB) -o $@
 
-command.out: $(COMMANDOBJ)
+command.out: $(COMMANDOBJ) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(COMMANDOBJ) $(APPLIB) -o $@
 
-mouse.out: $(MOUSEOBJ)
+moused.out: $(MOUSEOBJ) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(MOUSEOBJ) $(APPLIB) -o $@
 
+atad.out: $(ATAOBJ) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(ATAOBJ) $(APPLIB) -o $@
 
-%.a: %.o
-	$(AR) r $@ $?
+cdfsd.out: $(CDFSOBJ) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(CDFSOBJ) $(APPLIB) -o $@
+
+
+#%.a: %.o
+#	$(AR) r $@ $?
 
 #$(ARC): $(OBJS)
 #	$(AR) r $(ARC) $(OBJS)

@@ -15,10 +15,17 @@
 
 int intr_receiver_queid[16];
 
+INTR_INTERRUPT(intr_nop);\
+void intr_nop(void) {};
+
 void
 intr_init(void)
 {
+  int irq;
   memset(intr_receiver_queid,0,sizeof(intr_receiver_queid));
+  for(irq=0;irq<16;irq++) {
+    intr_define(0x20+irq,INTR_INTR_ENTRY(intr_nop),INTR_DPL_SYSTEM);
+  }
 }
 
 void

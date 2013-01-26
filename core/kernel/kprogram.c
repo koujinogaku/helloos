@@ -29,6 +29,8 @@ struct PGM {
   unsigned short taskid;
   unsigned short exitque;
   void *pgd;
+  unsigned long loadsize;
+  unsigned long offset;
   unsigned short taskque;
   char pgmname[8];
 };
@@ -55,6 +57,8 @@ struct PGM *pgm_alloc(void)
   pgm->exitque=0;
   pgm->taskque=0;
   pgm->pgd=0;
+  pgm->loadsize=0;
+  pgm->offset=0;
 
   list_add_tail(pgmtbl,pgm)
 
@@ -211,6 +215,7 @@ console_puts("\n");
     mutex_unlock(&pgm_tbl_mutex);
     return ERRNO_RESOURCE;
   }
+  pgm->loadsize=pagesize;
 
 //mem_dumpfree();
 
@@ -223,7 +228,7 @@ console_puts("\n");
       mutex_unlock(&pgm_tbl_mutex);
       return r;
     }
-    page_memcpy(pgm->pgd,(void*)((unsigned int)progaddr+n),loadbuf, 512);
+    page_memload(pgm->pgd,(void*)((unsigned int)progaddr+n),loadbuf, 512);
   }
   
   r=fat_close_file(fp);
@@ -248,7 +253,7 @@ console_puts("\n");
   }
 
   memset(userargs,0,CFG_MEM_USERARGUMENTSZ);
-  page_memcpy(pgm->pgd,(void*)(CFG_MEM_USERARGUMENT),userargs, CFG_MEM_USERARGUMENTSZ);
+  page_memload(pgm->pgd,(void*)(CFG_MEM_USERARGUMENT),userargs, CFG_MEM_USERARGUMENTSZ);
 
   taskid = task_create_process(pgm->pgd,progaddr,CFG_MEM_USERSTACKTOP);
   if(taskid<0) {
@@ -281,6 +286,145 @@ console_puts("\n");
   return taskid;
 }
 
+int program_allocate(char *name, int type, unsigned long size)
+{
+  struct PGM *pgm;
+  int taskid;
+  unsigned int pagesize;
+  char userargs[CFG_MEM_USERARGUMENTSZ];
+  int r;
+
+  mutex_lock(&pgm_tbl_mutex);
+  
+  if(pgmtbl==NULL) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_NOTINIT;
+  }
+  pgm=pgm_alloc();
+  if(pgm==NULL) {
+    console_puts("pgm alloc error\n");
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_RESOURCE;
+  }
+
+  pagesize=page_frame_size(size);
+  pgm->pgd=page_create_pgd();
+  if(pgm->pgd==NULL){
+    pgm_free(pgm);
+    console_puts("pgd alloc error\n");
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_RESOURCE;
+  }
+/*
+console_puts("pgd=");
+long2hex((int)tstpgd,s);
+console_puts(s);
+console_puts("\n");
+*/
+//page_dump_pgd(tstpgd);
+
+  r=page_alloc_vmem(pgm->pgd,(void*)CFG_MEM_USER,pagesize,(PAGE_TYPE_USER|PAGE_TYPE_RDWR));
+  if(r<0){
+    pgm_free(pgm);
+    console_puts("vmem alloc error\n");
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_RESOURCE;
+  }
+
+  pgm->loadsize=pagesize;
+
+//page_dump_pgd(tstpgd);
+
+  r = page_alloc_vmem(pgm->pgd,(void*)(CFG_MEM_USERDATAMAX-PAGE_PAGESIZE),PAGE_PAGESIZE,(PAGE_TYPE_USER|PAGE_TYPE_RDWR));
+  if(r<0){
+    pgm_free(pgm);
+    console_puts("vmem alloc error\n");
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_RESOURCE;
+  }
+
+  memset(userargs,0,CFG_MEM_USERARGUMENTSZ);
+  page_memload(pgm->pgd,(void*)(CFG_MEM_USERARGUMENT),userargs, CFG_MEM_USERARGUMENTSZ);
+
+  taskid = task_create_process(pgm->pgd,(void*)CFG_MEM_USER,CFG_MEM_USERSTACKTOP);
+  if(taskid<0) {
+    pgm_free(pgm);
+    console_puts("task create error\n");
+    mutex_unlock(&pgm_tbl_mutex);
+    return taskid;
+  }
+
+  if(type&PGM_TYPE_IO)
+    task_enable_io(taskid);
+
+  if(type&PGM_TYPE_VGA || 1) {// debug
+    if(pgm->pgd!=0) {
+      r=page_map_vga(pgm->pgd);
+      if(r<0) {
+        pgm_free(pgm);
+        console_puts("vga map error\n");
+        mutex_unlock(&pgm_tbl_mutex);
+        return r;
+      }
+    }
+  }
+
+  pgm->taskid = taskid;
+
+  strncpy(pgm->pgmname,name,sizeof(pgm->pgmname));
+  mutex_unlock(&pgm_tbl_mutex);
+
+  return taskid;
+}
+
+int program_loadimage(int taskid, void *image, unsigned long size)
+{
+  struct PGM *pgm;
+  void *loadbuf;
+
+  mutex_lock(&pgm_tbl_mutex);
+
+  if(pgmtbl==NULL) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_NOTINIT;
+  }
+  pgm=pgm_find(taskid);
+  if(pgm==NULL) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_NOTEXIST;
+  }
+
+  if(pgm->offset+size > pgm->loadsize) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_OVER;
+  }
+
+  if(size > MEM_PAGESIZE) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_OVER;
+  }
+
+  if(task_get_status(pgm->taskid)!=TASK_STAT_PREPARATION) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_MODE;
+  }
+
+  loadbuf=mem_alloc(MEM_PAGESIZE);
+  if(loadbuf==0) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_RESOURCE;
+  }
+  memcpy(loadbuf,image,size);
+  page_memload(pgm->pgd,(void*)(CFG_MEM_USER+pgm->offset),loadbuf, size);
+
+  mem_free(loadbuf,MEM_PAGESIZE);
+  pgm->offset += size;
+
+  mutex_unlock(&pgm_tbl_mutex);
+
+  return 0;
+}
+
 int program_set_args(int taskid, char *args, int argsize)
 {
   struct PGM *pgm;
@@ -303,7 +447,35 @@ int program_set_args(int taskid, char *args, int argsize)
   if(userargssz>argsize)
     userargssz=argsize;
   memcpy(userargs,args,userargssz);
-  page_memcpy(pgm->pgd,(void*)(CFG_MEM_USERARGUMENT),userargs, CFG_MEM_USERARGUMENTSZ);
+  page_memload(pgm->pgd,(void*)(CFG_MEM_USERARGUMENT),userargs, CFG_MEM_USERARGUMENTSZ);
+
+  mutex_unlock(&pgm_tbl_mutex);
+  return 0;
+}
+
+int program_get_args(int taskid, char *args, int argsize)
+{
+  struct PGM *pgm;
+  char userargs[CFG_MEM_USERARGUMENTSZ];
+  int userargssz=CFG_MEM_USERARGUMENTSZ;
+
+  mutex_lock(&pgm_tbl_mutex);
+
+  if(pgmtbl==NULL) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_NOTINIT;
+  }
+  pgm=pgm_find(taskid);
+  if(pgm==NULL) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_NOTEXIST;
+  }
+
+  memset(userargs,0,CFG_MEM_USERARGUMENTSZ);
+  if(userargssz>argsize)
+    userargssz=argsize;
+  page_memsave(pgm->pgd,(void*)(CFG_MEM_USERARGUMENT),userargs, CFG_MEM_USERARGUMENTSZ);
+  memcpy(args,userargs,userargssz);
 
   mutex_unlock(&pgm_tbl_mutex);
   return 0;
@@ -353,6 +525,27 @@ int program_get_exitque(int taskid)
   return pgm->exitque;
 }
 
+int program_get_exitcode(int taskid)
+{
+  struct PGM *pgm;
+  int exitcode;
+
+  mutex_lock(&pgm_tbl_mutex);
+
+  if(pgmtbl==NULL) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_NOTINIT;
+  }
+  pgm=pgm_find(taskid);
+  if(pgm==NULL) {
+    mutex_unlock(&pgm_tbl_mutex);
+    return ERRNO_NOTEXIST;
+  }
+  exitcode = task_get_exitcode(taskid);
+  mutex_unlock(&pgm_tbl_mutex);
+  return exitcode;
+}
+
 int program_delete(int taskid)
 {
   struct PGM *pgm;
@@ -383,7 +576,7 @@ int program_delete(int taskid)
 
   mutex_unlock(&pgm_tbl_mutex);
 
-  return exitcode;
+  return 0x7fff & exitcode;
 }
 
 int program_exitevent(struct msg_head *msg)

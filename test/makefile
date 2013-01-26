@@ -22,8 +22,11 @@ TSTNANOX= tstnanox.o
 TSTMOUSE= tstmouse.o
 TSTDEMOX= tstdemox.o
 TSTATA= tstata.o
+TSTATAC= tstatac.o
+TSTISO= tstiso.o
+TSTCDFS= tstcdfs.o
 
-all: tst.out tst2.out tstata.out #tstdemox.out #tstnanox.out #tstmouse.out testmwin.out 
+all: tstata.out tstatac.out tstiso.out tstcdfs.out #tst.out tst2.out #tstdemox.out #tstnanox.out #tstmouse.out testmwin.out 
 
 tst.out: $(TST) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TST) $(APPLIB) -o $@
@@ -46,8 +49,21 @@ tstdemox.out: $(TSTDEMOX) $(APPLIB) $(MICROWINLIB)
 tstata.out: $(TSTATA) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TSTATA) $(APPLIB) -o $@
 
-%.a: %.o
-	$(AR) r $@ $?
+tstatac.out: $(TSTATAC) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TSTATAC) $(APPLIB) -o $@
+
+tstiso.out: $(TSTISO) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TSTISO) $(APPLIB) -o $@
+
+tstcdfs.out: $(TSTCDFS) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TSTCDFS) $(APPLIB) -o $@
+
+#%.a: %.o
+#	$(AR) r $@ $?
+
+atapi.a: $(OBJS)
+	rm -f $@
+	$(AR) rcs $@ $(OBJS)
 
 #$(ARC): $(OBJS)
 #	$(AR) r $(ARC) $(OBJS)

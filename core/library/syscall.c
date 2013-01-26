@@ -86,10 +86,22 @@ int syscall_wait(int c)
   return r;
 }
 
-int syscall_shm_create(int shmid, int size)
+int syscall_shm_create(unsigned int shmname, unsigned long size)
 {
   int r=0;
-  SYSCALL_2(SYSCALL_FN_SHM_CREATE, r, shmid, size);
+  SYSCALL_2(SYSCALL_FN_SHM_CREATE, r, shmname, size);
+  return r;
+}
+int syscall_shm_setname(int shmid, unsigned int shmname)
+{
+  int r=0;
+  SYSCALL_2(SYSCALL_FN_SHM_SETNAME, r, shmid, shmname);
+  return r;
+}
+int syscall_shm_lookup(unsigned int shmname)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_SHM_LOOKUP, r, shmname);
   return r;
 }
 int syscall_shm_delete(int shmid)
@@ -98,19 +110,20 @@ int syscall_shm_delete(int shmid)
   SYSCALL_1(SYSCALL_FN_SHM_DELETE, r, shmid);
   return r;
 }
-int syscall_shm_getsize(int shmid, int sizep)
+int syscall_shm_getsize(int shmid, unsigned long *sizep)
 {
   int r=0;
-  SYSCALL_2(SYSCALL_FN_SHM_GETSIZE, r, shmid, sizep);
+  int sizepv = (int)sizep;
+  SYSCALL_2(SYSCALL_FN_SHM_GETSIZE, r, shmid, sizepv);
   return r;
 }
-int syscall_shm_map(int shmid, int vmem)
+int syscall_shm_map(int shmid, void *vmem)
 {
   int r=0;
   SYSCALL_2(SYSCALL_FN_SHM_MAP, r, shmid, vmem);
   return r;
 }
-int syscall_shm_unmap(int shmid, int vmem)
+int syscall_shm_unmap(int shmid, void *vmem)
 {
   int r=0;
   SYSCALL_2(SYSCALL_FN_SHM_UNMAP, r, shmid, vmem);
@@ -203,11 +216,32 @@ int syscall_pgm_load(char *filename, int type)
   SYSCALL_2(SYSCALL_FN_PGM_LOAD, r, filename, type);
   return r;
 }
+int syscall_pgm_allocate(char *name, int type, unsigned long size)
+{
+  int r=0;
+  r=*((int*)name); // check memory fault
+  SYSCALL_3(SYSCALL_FN_PGM_ALLOCATE, r, name, type, size);
+  return r;
+}
+int syscall_pgm_loadimage(int taskid, void *image, unsigned long size)
+{
+  int r=0;
+  r=*((int*)image); // check memory fault
+  SYSCALL_3(SYSCALL_FN_PGM_LOADIMAGE, r, taskid, image, size);
+  return r;
+}
 int syscall_pgm_setargs(int taskid, char *args, int argsize)
 {
   int r=0;
   r=*((int*)args); // check memory fault
   SYSCALL_3(SYSCALL_FN_PGM_SETARGS, r, taskid, args, argsize);
+  return r;
+}
+int syscall_pgm_getargs(int taskid, char *args, int argsize)
+{
+  int r=0;
+  r=*((int*)args); // check memory fault
+  SYSCALL_3(SYSCALL_FN_PGM_GETARGS, r, taskid, args, argsize);
   return r;
 }
 int syscall_pgm_start(int taskid, int exitque)
@@ -232,6 +266,12 @@ int syscall_pgm_gettaskq(int taskid)
 {
   int r=0;
   SYSCALL_1(SYSCALL_FN_PGM_GETTASKQ, r, taskid);
+  return r;
+}
+int syscall_pgm_getexitcode(int taskid)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_PGM_GETEXITCODE, r, taskid);
   return r;
 }
 int syscall_pgm_list(int start, int count, void *plist)

@@ -6,10 +6,12 @@
 #define SHM_MAXSIZE (PAGE_PAGESIZE*SHM_MAXPAGES)
 
 int shm_init(void);
-int shm_create(unsigned int shmid, unsigned int size);
-int shm_delete(unsigned int shmid);
-int shm_get_size(unsigned int shmid, unsigned int *size);
-int shm_map(unsigned int shmid,void *pgd, void *vmem, int type);
-int shm_unmap(unsigned int shmid,void *pgd, void *vmem);
+int shm_create(unsigned int shmname, unsigned long size);
+int shm_setname(int shmid, unsigned int shmname);
+int shm_lookup(unsigned int shmname);
+int shm_delete(int shmid);
+int shm_get_size(int shmid, unsigned long *size);
+int shm_map(int shmid,void *pgd, void *vmem, int type);
+int shm_unmap(int shmid,void *pgd, void *vmem);
 
 #endif

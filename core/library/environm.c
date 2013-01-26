@@ -8,9 +8,9 @@
 #include "message.h"
 
 struct environment_process_arg {
-  short display_queid;
-  short keyboard_queid;
-  char arguments[CFG_MEM_USERARGUMENTSZ-sizeof(short)*2];
+  short  display_queid;
+  short  keyboard_queid;
+  char   arguments[CFG_MEM_USERARGUMENTSZ-sizeof(short)*2];
 };
 
 static unsigned short environment_queid = 0;
@@ -128,6 +128,37 @@ int environment_exec(char *filename, void *session)
   return taskid;
 }
 
+int environment_allocimage(char *programname, unsigned long size)
+{
+  return syscall_pgm_allocate(programname,SYSCALL_PGM_TYPE_IO|SYSCALL_PGM_TYPE_VGA,size);
+}
+
+int environment_loadimage(int taskid, void *image, unsigned long size)
+{
+  return syscall_pgm_loadimage(taskid, image, size);
+}
+
+int environment_execimage(int taskid, void *session)
+{
+  int r,n;
+  int queid;
+
+  if(session!=0) {
+    n = environment_get_session_size();
+    r = syscall_pgm_setargs(taskid, session, n);
+    if(r<0)
+      return r;
+  }
+
+  queid = environment_getqueid();
+
+  r=syscall_pgm_start(taskid, queid);
+  if(r<0)
+    return r;
+
+  return taskid;
+}
+
 int environment_getqueid(void)
 {
   return environment_queid;
@@ -196,11 +227,11 @@ int environment_kill(int taskid)
   return message_send(taskque,&msg);
 }
 
-int environment_wait(int *exitcode, int tryflg)
+int environment_wait(int *exitcode, int tryflg, void *userargs, int usersize)
 {
   struct msg_head msg;
   int taskid;
-  int r;
+  int r,ec;
 
   msg.size=sizeof(msg);
   r=message_receive(tryflg, MSG_SRV_KERNEL, MSG_CMD_KRN_EXIT, &msg);
@@ -209,12 +240,26 @@ int environment_wait(int *exitcode, int tryflg)
   }
 
   taskid=msg.arg;
+
+  ec = syscall_pgm_getexitcode(taskid);
+  if(ec<0) {
+    return ec;
+  }
+  if(ec & 0x8000) {
+    if(userargs!=0 && usersize!=0) {
+      r = syscall_pgm_getargs(taskid, userargs, usersize);
+      if(r<0) {
+        syscall_puts("core dump failed.\n");
+      }
+    }
+  }
+
   r = syscall_pgm_delete(taskid);
   if(r<0) {
     return r;
   }
 
-  *exitcode=r;
+  *exitcode=ec;
 
   return taskid;
 }

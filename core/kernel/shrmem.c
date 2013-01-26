@@ -16,7 +16,8 @@
 struct SHM {
   struct SHM *next;
   struct SHM *prev;
-  unsigned int id;
+  int id;
+  unsigned int name;
   unsigned int status;
   int *pages;
   unsigned int pagecnt;
@@ -47,7 +48,7 @@ console_puts("\n");
   return 0;
 }
 
-int shm_create(unsigned int shmid, unsigned int size)
+int shm_create(unsigned int shmname, unsigned long size)
 {
   struct SHM *shm;
   int shm_idx,i;
@@ -61,15 +62,15 @@ int shm_create(unsigned int shmid, unsigned int size)
     return ERRNO_OVER;
   }
 
-  list_for_each(shmtbl,shm)
-  {
-    if(shm->id==shmid)
-      break;
+  if(shmname!=0) {
+    list_for_each(shmtbl,shm) {
+      if(shm->name==shmname) {
+        mutex_unlock(&shm_tbl_mutex);
+        return ERRNO_INUSE;
+      }
+    }
   }
-  if(shmtbl!=shm){
-    mutex_unlock(&shm_tbl_mutex);
-    return ERRNO_INUSE;
-  }
+
   list_alloc(shmtbl,SHM_TBLSZ,shm_idx)
   if(shm_idx==0) {
     mutex_unlock(&shm_tbl_mutex);
@@ -103,30 +104,78 @@ console_puts(" ");
   }
   shm->pagecnt=pagecnt;
   shm->mappedcnt=0;
-  shm->id=shmid;
+  shm->id=shm_idx;
+  shm->name=shmname;
 
   list_add(shmtbl,shm);
 
   mutex_unlock(&shm_tbl_mutex);
+  return shm_idx;
+}
+
+static int shm_not_exist(int shmid)
+{
+  if(shmid<1 || shmid>=SHM_TBLSZ) {
+    return ERRNO_NOTEXIST;
+  }
+
+  if(shmtbl[shmid].status == SHM_STAT_NOTUSE) {
+    return ERRNO_NOTEXIST;
+  }
   return 0;
 }
 
-int shm_delete(unsigned int shmid)
+int shm_setname(int shmid, unsigned int shmname)
+{
+  struct SHM *shm;
+  mutex_lock(&shm_tbl_mutex);
+
+  if(shm_not_exist(shmid)) {
+    mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_NOTEXIST;
+  }
+
+  list_for_each(shmtbl,shm) {
+    if(shm->name==shmname) {
+      mutex_unlock(&shm_tbl_mutex);
+      return ERRNO_INUSE;
+    }
+  }
+
+  shmtbl[shmid].name = shmname;
+
+  mutex_unlock(&shm_tbl_mutex);
+  return shmid;
+}
+
+int shm_lookup(unsigned int shmname)
+{
+  struct SHM *shm;
+  mutex_lock(&shm_tbl_mutex);
+
+  list_for_each(shmtbl,shm) {
+    if(shm->status==SHM_STAT_USED && shm->name==shmname ) {
+      mutex_unlock(&shm_tbl_mutex);
+      return shm->id;
+    }
+  }
+  mutex_unlock(&shm_tbl_mutex);
+  return ERRNO_NOTEXIST;
+}
+
+int shm_delete(int shmid)
 {
   struct SHM *shm;
   int i;
 
   mutex_lock(&shm_tbl_mutex);
 
-  list_for_each(shmtbl,shm)
-  {
-    if(shm->id==shmid)
-      break;
-  }
-  if(shmtbl==shm) {
+  if(shm_not_exist(shmid)) {
     mutex_unlock(&shm_tbl_mutex);
     return ERRNO_NOTEXIST;
   }
+  shm=&(shmtbl[shmid]);
+
   if(shm->mappedcnt != 0) {
     mutex_unlock(&shm_tbl_mutex);
     return ERRNO_INUSE;
@@ -145,27 +194,25 @@ int shm_delete(unsigned int shmid)
   return 0;
 }
 
-int shm_get_size(unsigned int shmid, unsigned int *size)
+int shm_get_size(int shmid, unsigned long *size)
 {
   struct SHM *shm;
 
   mutex_lock(&shm_tbl_mutex);
-  list_for_each(shmtbl,shm)
-  {
-    if(shm->id==shmid)
-      break;
-  }
-  if(shmtbl==shm) {
+
+  if(shm_not_exist(shmid)) {
     mutex_unlock(&shm_tbl_mutex);
     return ERRNO_NOTEXIST;
   }
+  shm=&(shmtbl[shmid]);
+
   *size = shm->pagecnt*PAGE_PAGESIZE;
 
   mutex_unlock(&shm_tbl_mutex);
   return 0;
 }
 
-int shm_map(unsigned int shmid,void *pgd, void *vmem, int type)
+int shm_map(int shmid,void *pgd, void *vmem, int type)
 {
   struct SHM *shm;
   unsigned int vpage;
@@ -173,15 +220,12 @@ int shm_map(unsigned int shmid,void *pgd, void *vmem, int type)
 
   mutex_lock(&shm_tbl_mutex);
 
-  list_for_each(shmtbl,shm)
-  {
-    if(shm->id==shmid)
-      break;
-  }
-  if(shmtbl==shm) {
+  if(shm_not_exist(shmid)) {
     mutex_unlock(&shm_tbl_mutex);
     return ERRNO_NOTEXIST;
   }
+  shm=&(shmtbl[shmid]);
+
   for(vpage=(unsigned int)vmem,i=0; i<shm->pagecnt; i++,vpage+=PAGE_PAGESIZE)
   {
     r=page_map_vpage(pgd, (void*)vpage, (void*)shm->pages[i], type);
@@ -196,7 +240,7 @@ int shm_map(unsigned int shmid,void *pgd, void *vmem, int type)
   mutex_unlock(&shm_tbl_mutex);
   return 0;
 }
-int shm_unmap(unsigned int shmid,void *pgd, void *vmem)
+int shm_unmap(int shmid,void *pgd, void *vmem)
 {
   struct SHM *shm;
   unsigned int vpage;
@@ -204,15 +248,12 @@ int shm_unmap(unsigned int shmid,void *pgd, void *vmem)
   void *ppage;
 
   mutex_lock(&shm_tbl_mutex);
-  list_for_each(shmtbl,shm)
-  {
-    if(shm->id==shmid)
-      break;
-  }
-  if(shmtbl==shm) {
+  if(shm_not_exist(shmid)) {
     mutex_unlock(&shm_tbl_mutex);
     return ERRNO_NOTEXIST;
   }
+  shm=&(shmtbl[shmid]);
+
   for(vpage=(unsigned int)vmem,i=0; i<shm->pagecnt; i++,vpage+=PAGE_PAGESIZE)
   {
     ppage=page_get_ppage(pgd, (void*)vpage);

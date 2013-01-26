@@ -6,6 +6,7 @@
 #include "environm.h"
 #include "message.h"
 #include "memory.h"
+#include "excptdmp.h"
 
 #define COMMAND_LINESIZE    127
 #define COMMAND_ARGMAX      32
@@ -183,19 +184,33 @@ int command_exec(int argc, char *argv[])
 int command_wait(int *exitcode, int tryflg)
 {
   int taskid;
+  char *userargs;
+  int usersize;
 
-  taskid=environment_wait(exitcode, tryflg);
-  if(taskid==ERRNO_OVER)
+  usersize = environment_get_session_size();
+  userargs = malloc(usersize);
+  if(userargs==0)
+    return ERRNO_RESOURCE;
+
+  taskid=environment_wait(exitcode, tryflg, userargs, usersize);
+  if(taskid==ERRNO_OVER) {
+    mfree(userargs);
     return taskid;
+  }
 
   if(taskid<0) {
     display_puts("wait error=");
     int2dec(-taskid,s);
     display_puts(s);
     display_puts("\n");
+    mfree(userargs);
     return taskid;
   }
 
+  if(*exitcode & 0x8000) {
+    exception_dump((void*)userargs, display_puts);
+  }
+  mfree(userargs);
   return taskid;
 }
 

@@ -23,7 +23,7 @@ struct pagelist {
 };
 static char s[10];
 
-struct PTE *page_system_pgd;
+struct PTE *page_system_pgd=0;
 struct pagelist page_freelist;
 static unsigned int page_total_free_page;
 
@@ -100,6 +100,14 @@ page_get_faultaddr(void)
   return vaddr;
 }
 
+unsigned int
+page_get_mode(void)
+{
+  int mode;
+  asm volatile ("mov %%cr0, %%eax":"=a"(mode):);
+  return mode;
+}
+
 
 void page_free(void *vpageaddr)
 {
@@ -149,6 +157,7 @@ void *page_alloc(void)
   page_map_vpage(pgd,pagewindow,pageaddr,(PAGE_TYPE_RDWR|PAGE_TYPE_USER));
   page_flush_cache();
   page_freelist.next=pagewindow->next;
+  pagewindow->next=(void*)1;
   page_unmap_vpage(pgd,pagewindow);
   page_flush_cache();
   END_CPULOCK();
@@ -325,17 +334,6 @@ int page_fault_proc( Excinfo *info )
   char s[16];
 
   if( info->errcode&PAGE_ERR_PROTECT ) {
-    console_puts("*** page is ");
-    if(info->errcode&PAGE_ERR_WRITE)
-      console_puts("write");
-    else
-      console_puts("read");
-    console_puts("-protected running on ");
-    if(info->errcode&PAGE_ERR_USER)
-      console_puts("user");
-    else
-      console_puts("supervisor");
-    console_puts("-mode ***\n");
     return -1;
   }
   //  console_puts("pgd(cr3)=");
@@ -402,7 +400,7 @@ void page_fault_handler( Excinfo info )
   }
 
   if(page_fault_proc(&info)<0) {
-    excp_abort(&info, EXCP_NO_PGF, "Page Fault");
+    excp_abort(&info, EXCP_NO_PGF);
   }
 }
 
@@ -637,20 +635,34 @@ page_alloc_vmem(void *pgd, void *vmem, unsigned int size, int type)
 
 
 void *
-page_memcpy(void *pgd, void *dest, void *src, unsigned int size)
+page_memload(void *pgd, void *target, void *kmem, unsigned int size)
 {
   void *orgpgd;
 
   BEGIN_CPULOCK();
   orgpgd = (void*)page_get_pgd();
   page_set_pgd(pgd);
-  memcpy(dest,src,size);
+  memcpy(target,kmem,size);
   page_set_pgd(orgpgd);
   END_CPULOCK();
 
-  return dest;
+  return target;
 }
 
+void *
+page_memsave(void *pgd, void *target, void *kmem, unsigned int size)
+{
+  void *orgpgd;
+
+  BEGIN_CPULOCK();
+  orgpgd = (void*)page_get_pgd();
+  page_set_pgd(pgd);
+  memcpy(kmem,target,size);
+  page_set_pgd(orgpgd);
+  END_CPULOCK();
+
+  return target;
+}
 
 void
 page_dump_pgd(void *ppgd,unsigned int startaddr,unsigned int endaddr)

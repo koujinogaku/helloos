@@ -6,7 +6,7 @@ CC=$(TS)-gcc
 CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../include #-I../loader
 
 TARGET=hello2
-OBJS= kernel.o desc.o console.o string.o kmemory.o task.o pic.o intr.o queue.o alarm.o timer.o dma.o floppy.o fat.o sysentry.o exception.o mutex.o page.o shrmem.o kprogram.o fpu.o
+OBJS= kernel.o desc.o console.o string.o kmemory.o task.o pic.o intr.o queue.o alarm.o timer.o dma.o floppy.o fat.o sysentry.o exception.o mutex.o page.o shrmem.o kprogram.o fpu.o excptdmp.o
 
 EXES=ipl.sys setup.sys kernel.sys display.out keyboard.out command.out dir.out type.out mouse.out $(TESTEXES) #window.out winmgr.out
 
@@ -16,8 +16,8 @@ kernel.sys: kernelstart.o $(OBJS) kernel.ls
 %.sys: %.o %.ls
 	$(LD) -T $*.ls -Map $*.map --cref $< -o $@
 
-%.a: %.o
-	$(AR) r $@ $?
+#%.a: %.o
+#	$(AR) r $@ $?
 
 #$(ARC): $(OBJS)
 #	$(AR) r $(ARC) $(OBJS)

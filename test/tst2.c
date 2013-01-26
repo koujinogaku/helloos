@@ -50,33 +50,41 @@ void tst_console(void)
 
 }
 
-#define SHRMEMNAME 1
-#define SHRMEMNAME2 2
+#define SHRMEMNAME 10000
+#define SHRMEMNAME2 10002
 #define SHRMEMADDR ((void *)0x6000000)
 #define SHRMEMHEAP ((void *)0x7000000)
 
 void tst_shm(void)
 {
   int r;
+  int shmid;
 
   syscall_wait(10);
 
-  r=syscall_shm_map(SHRMEMNAME,(unsigned int)SHRMEMADDR);
-  display_puts("shm map=");
-  long2hex(r,s);
+  shmid=syscall_shm_lookup(SHRMEMNAME);
+  display_puts("shm2 lookup=");
+  sint2dec(shmid,s);
+  display_puts(s);
+
+  r=syscall_shm_map(shmid,(void*)SHRMEMADDR);
+  display_puts(" shm2 map=");
+  sint2dec(r,s);
   display_puts(s);
 //  display_puts("\n");
 
   syscall_wait(50);
-  memcpy(s,(void*)SHRMEMADDR,4);
+  syscall_mtx_lock((int*)SHRMEMADDR);
+  memcpy(s,(void*)(SHRMEMADDR+sizeof(int)),4);
+  syscall_mtx_unlock((int*)SHRMEMADDR);
   s[4]=0;
-  display_puts(" shrstr=");
+  display_puts(" shm2 shrstr=");
   display_puts(s);
 //  display_puts("\n");
 
-  r=syscall_shm_unmap(SHRMEMNAME,(unsigned int)SHRMEMADDR);
-  display_puts(" shm unmap=");
-  long2hex(r,s);
+  r=syscall_shm_unmap(shmid,(void*)SHRMEMADDR);
+  display_puts(" shm2 unmap=");
+  sint2dec(r,s);
   display_puts(s);
   display_puts("\n");
 }
@@ -84,28 +92,32 @@ void tst_shm(void)
 void tst_shm2(void)
 {
   int r;
+  int shmid;
 
   syscall_wait(10);
 
+  shmid=shm_lookup(SHRMEMNAME);
+  display_puts("shm2 lookup=");
+  sint2dec(shmid,s);
+  display_puts(s);
 
-  r=shm_map(SHRMEMNAME,(char*)SHRMEMADDR);
-  display_puts("shm map=");
+  r=shm_map(shmid,(void*)SHRMEMADDR);
+  display_puts(" shm2 map=");
   sint2dec(r,s);
   display_puts(s);
 //  display_puts("\n");
-  if(r<0)
-    return;
 
   syscall_wait(50);
-  memcpy(s,(void*)SHRMEMADDR,4);
+  syscall_mtx_lock((int*)SHRMEMADDR);
+  memcpy(s,(void*)(SHRMEMADDR+sizeof(int)),4);
+  syscall_mtx_unlock((int*)SHRMEMADDR);
   s[4]=0;
-  display_puts(" shrstr=");
+  display_puts(" shm2 shrstr=");
   display_puts(s);
 //  display_puts("\n");
 
-  r=shm_unmap(SHRMEMNAME);
-  //r=shm_unmap(0);
-  display_puts(" shm unmap=");
+  r=shm_unmap(shmid);
+  display_puts(" shm2 unmap=");
   sint2dec(r,s);
   display_puts(s);
   display_puts("\n");
@@ -346,8 +358,9 @@ syscall_wait(100);
 
 int tst_alarm(void)
 {
-  int i,rc;
-  int alarm;
+  int i;
+  //int rc;
+  //int alarm;
   struct msg_head selected_msg;
 
   for(i=0;i<10;i++) {
@@ -358,10 +371,10 @@ int tst_alarm(void)
 
   for(i=0;i<10;i++) {
     display_puts("@");
-    alarm = syscall_alarm_set(50,environment_getqueid(),0x00010000);
+    syscall_alarm_set(50,environment_getqueid(),0x00010000);
     selected_msg.size=sizeof(selected_msg);
-    rc=message_poll(MESSAGE_MODE_WAIT, 0, 0, &selected_msg);
-    rc=message_receive(MESSAGE_MODE_TRY, 0, 0, &selected_msg);
+    message_poll(MESSAGE_MODE_WAIT, 0, 0, &selected_msg);
+    message_receive(MESSAGE_MODE_TRY, 0, 0, &selected_msg);
   }
   display_puts("\n");
 

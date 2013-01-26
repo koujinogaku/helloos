@@ -51,7 +51,7 @@ void fpu_handler( Excinfo info )
   struct FPUTASK *fpu_task;
 
   if(fputbl==0) {
-    excp_abort(&info, EXCP_NO_FPU, "No Math Coprocessor");
+    excp_abort(&info, EXCP_NO_FPU);
     return;
   }
   // Disable TS flag

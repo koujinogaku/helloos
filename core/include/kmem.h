@@ -43,4 +43,20 @@ struct kmem_systime
   unsigned long high;
 };
 
+struct kmem_except_reg {
+  unsigned long gs, fs, es, ds, ss;		// push values of each register
+  unsigned long edi, esi, ebp, esp;		// pushad info
+  unsigned long ebx, edx, ecx, eax;		// ..
+  unsigned long errcode, eip, cs, eflags;	// exception info
+  unsigned long app_esp, app_ss;		// appl stack info.(if user mode)
+};
+struct kmem_except_info {
+  unsigned long excpno;
+  unsigned long cr0;
+  unsigned long cr2;
+  unsigned long cr3;
+  unsigned int  taskid;
+  unsigned int  lastfunc;
+  struct kmem_except_reg regs;
+};
 #endif /* KMEM_H */

@@ -26,12 +26,14 @@ int page_init(void);
 void *page_get_system_pgd(void);
 void *page_get_current_pgd(void);
 void *page_get_faultvaddr(void);
+unsigned int page_get_mode(void);
 void *page_create_pgd(void);
 void page_delete_pgd(void *pgd);
 void page_dump_pgd(void *pgd,unsigned int startaddr,unsigned int endaddr);
 
 int page_map_vmem(void *pgd, void *vmem, void *pmem, unsigned int size, int type);
 int page_alloc_vmem(void *pgd, void *vmem, unsigned int size, int type);
-void *page_memcpy(void *pgd, void *dest, void *src, unsigned int size);
+void *page_memload(void *pgd, void *target, void *kmem, unsigned int size);
+void *page_memsave(void *pgd, void *target, void *kmem, unsigned int size);
 int page_map_vga(void *pgd);
 #endif

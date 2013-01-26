@@ -7,7 +7,7 @@ char *strrchr(const char *str, char ch)
   for(;len>0;) {
     --len;
     if(str[len]==ch)
-      return &(str[len]);
+      return (char *)(&(str[len]));
   }
   return 0;
 }

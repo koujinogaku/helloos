@@ -305,5 +305,23 @@ int message_init(void)
   }
   return 0;
 }
+int message_set_quename(int quename)
+{
+  int rc;
 
+  if(msg_myqueid==0) {
+    rc=message_init();
+    if(rc<0)
+      return rc;
+  }
 
+  rc = syscall_que_setname(msg_myqueid, quename);
+  if(rc<0) {
+//    syscall_puts("msg_que_setname error=");
+//    int2dec(-rc,s);
+//    syscall_puts(s);
+//    syscall_puts("\n");
+    return rc;
+  }
+  return 0;
+}

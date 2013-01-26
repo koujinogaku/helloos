@@ -102,6 +102,10 @@ int print_vsformat(char* buff,const char* fmt,va_list arg)
                 size = tsprintf_double(val, buff, width);
 		break;
 #endif
+            case 'l':        /* Long Modifier */
+                /* Skip */
+                break;
+
             default:        /* other than control code */
                 /* %%(% charactor) is performed */
                 len++;
@@ -256,6 +260,8 @@ static int tsprintf_char(int ch,char* buff)
 static int tsprintf_string(char* str,char* buff)
 {
 	int count = 0;
+	if(str==0)
+		str="(null)";
 	while(*str){
 		*(buff++) = *str;
 		str++;

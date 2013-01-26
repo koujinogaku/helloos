@@ -87,7 +87,8 @@ void bucket_mfree(void* mem)
 
 static int bucket_init_in(void)
 {
-  int shmrc,rc;
+  int shmid,rc;
+  int initflg=0;
 
   dsctbl=malloc(sizeof(BUCKET)*BUCKET_MAXDSC);
   if(dsctbl==0)
@@ -101,21 +102,25 @@ static int bucket_init_in(void)
   for(rc=0;rc<BUCKET_QUEMAX;rc++)
     quetbl[rc].dsc = -1;
 
-  shmrc=shm_create(CFG_MEM_BUCKETHEAP,CFG_MEM_BUCKETHEAPSZ); // same name to map address
-  if(shmrc<0 && shmrc!=ERRNO_INUSE)
-    return shmrc;
+  shmid=shm_open(MSGQUENAMES_BUCKET, CFG_MEM_BUCKETHEAPSZ, &initflg); // same name to map address
+  if(shmid<0) {
+    return shmid;
+  }
 
-  rc=shm_map(CFG_MEM_BUCKETHEAP,(void*)CFG_MEM_BUCKETHEAP);
-  if(rc<0)
+  rc=shm_map(shmid,(void*)CFG_MEM_BUCKETHEAP);
+  if(rc<0) {
+    if(initflg)
+      shm_delete(shmid);
     return rc;
+  }
 
   smtx = (void*)CFG_MEM_BUCKETHEAP;
   hctl = (void*)((unsigned long)CFG_MEM_BUCKETHEAP+sizeof(int));
-  if(shmrc!=ERRNO_INUSE) {
-    *smtx=1;
-    memory_init(hctl,CFG_MEM_BUCKETHEAPSZ-sizeof(int));
-    syscall_mtx_unlock(smtx);
-  }
+  if(!initflg)
+    return 0;
+
+  memory_init(hctl,CFG_MEM_BUCKETHEAPSZ-sizeof(int));
+  syscall_mtx_unlock(smtx);
 
   return 0;
 }

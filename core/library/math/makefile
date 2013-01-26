@@ -3,7 +3,7 @@ LD=$(TS)-ld
 AR=$(TS)-ar
 OBJDUMP=$(TS)-objdump
 CC=$(TS)-gcc
-CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../include
+CFLAGS=-O2 -Wall -fcall-used-ebx -fno-builtin -nostdlib -static -I../../include
 
 LIB=libmath.a
 OBJS= cos.o sin.o tan.o atan.o atan2.o sqrt.o fabs.o hypot.o log10.o bpow.o
@@ -12,7 +12,7 @@ all: $(LIB)
 
 $(LIB): $(OBJS)
 	rm -f $@
-	$(AR) r $@ $?
+	$(AR) r $@ $(OBJS)
 
 #%.a: %.o
 #	$(AR) r $@ $?

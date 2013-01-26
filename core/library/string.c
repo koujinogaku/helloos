@@ -1,7 +1,8 @@
 #include "string.h"
 #include "stdlib.h"
 
-void int2dec(unsigned int num, char *str)
+char *
+int2dec(unsigned int num, char *str)
 {
   int i;
   char s[16];
@@ -16,37 +17,46 @@ void int2dec(unsigned int num, char *str)
     *str++ = s[i];
   }
   *str=0;
+
+  return str;
 }
 
-void sint2dec(int num, char *str)
+char *
+sint2dec(int num, char *str)
 {
   if(num<0) {
     *str='-';
     str++;
     num = -num;
   }
-  int2dec(num,str);
+  return int2dec(num,str);
 }
 
-void byte2hex(unsigned char num, char *str)
+char *
+byte2hex(unsigned char num, char *str)
 {
-    str[0]=numtohex1((num&0xf0)/16);
-    str[1]=numtohex1(num&0x0f);
-    str[2]=0;
+  str[0]=numtohex1((num&0xf0)/16);
+  str[1]=numtohex1(num&0x0f);
+  str[2]=0;
+  return &str[2];
 }
 
-void word2hex(unsigned short num, char *str)
+char *
+word2hex(unsigned short num, char *str)
 {
-    str[0]=numtohex1((num&0xf000)/16/256);
-    str[1]=numtohex1((num&0x0f00)/256);
-    str[2]=numtohex1((num&0x00f0)/16);
-    str[3]=numtohex1( num&0x000f    );
-    str[4]=0;
+  str[0]=numtohex1((num&0xf000)/16/256);
+  str[1]=numtohex1((num&0x0f00)/256);
+  str[2]=numtohex1((num&0x00f0)/16);
+  str[3]=numtohex1( num&0x000f    );
+  str[4]=0;
+  return &str[4];
 }
-void long2hex(unsigned long num, char *str)
+
+char *
+long2hex(unsigned long num, char *str)
 {
-  word2hex((num&0xffff0000)>>16,str);
-  word2hex(num&0x0000ffff,&str[4]);
+  str=word2hex((num&0xffff0000)>>16,str);
+  return word2hex(num&0x0000ffff,str);
 }
 
 /* coping memory blocks */
@@ -152,6 +162,7 @@ strncmp( void *dest, const void *src, unsigned int n )
   else
     return 0;
 }
+
 int
 strncmpi( void *dest, const void *src, unsigned int n )
 {
@@ -175,7 +186,8 @@ strncmpi( void *dest, const void *src, unsigned int n )
     return 0;
 }
 
-int strlen(const char *chr)
+int
+strlen(const char *chr)
 {
   int len;
 
@@ -184,7 +196,8 @@ int strlen(const char *chr)
   return len;
 }
 
-char numtohex1(char chr)
+char
+numtohex1(char chr)
 {
 	chr = chr & 0x0f;
 	if(chr < 10)
@@ -193,7 +206,8 @@ char numtohex1(char chr)
 		return chr - 10 + 'A';
 }
 
-char uppercase(char c)
+char
+uppercase(char c)
 {
   if(c>='a' && c<='z')
     c -= 0x20;

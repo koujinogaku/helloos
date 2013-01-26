@@ -599,7 +599,7 @@ term(void)
 		case GR_EVENT_TYPE_CLOSE_REQ:
 			GrClose();
 			environment_kill(taskid);
-			environment_wait(&exitcode,MESSAGE_MODE_WAIT);
+			environment_wait(&exitcode,MESSAGE_MODE_WAIT,0,0);
 			exit(0);
 			break;
 

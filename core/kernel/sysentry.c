@@ -96,19 +96,25 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
     eax = syscall_wait(ebx);
     break;
   case SYSCALL_FN_SHM_CREATE:
-    eax = syscall_shm_create(ebx, ecx);
+    eax = syscall_shm_create((unsigned int)ebx, (unsigned long)ecx);
+    break;
+  case SYSCALL_FN_SHM_SETNAME:
+    eax = syscall_shm_setname(ebx, (unsigned int)ecx);
+    break;
+  case SYSCALL_FN_SHM_LOOKUP:
+    eax = syscall_shm_lookup((unsigned int)ebx);
     break;
   case SYSCALL_FN_SHM_DELETE:
     eax = syscall_shm_delete(ebx);
     break;
   case SYSCALL_FN_SHM_GETSIZE:
-    eax = syscall_shm_getsize(ebx, ecx);
+    eax = syscall_shm_getsize(ebx, (unsigned long *)ecx);
     break;
   case SYSCALL_FN_SHM_MAP:
-    eax = syscall_shm_map(ebx, ecx);
+    eax = syscall_shm_map(ebx, (void *)ecx);
     break;
   case SYSCALL_FN_SHM_UNMAP:
-    eax = syscall_shm_unmap(ebx, ecx);
+    eax = syscall_shm_unmap(ebx, (void *)ecx);
     break;
   case SYSCALL_FN_QUE_CREATE:
     eax = syscall_que_create((unsigned int)ebx);
@@ -149,8 +155,17 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
   case SYSCALL_FN_PGM_LOAD:
     eax = syscall_pgm_load((char *)ebx, ecx);
     break;
+  case SYSCALL_FN_PGM_ALLOCATE:
+    eax = syscall_pgm_allocate((char *)ebx, ecx, (unsigned long)edx);
+    break;
+  case SYSCALL_FN_PGM_LOADIMAGE:
+    eax = syscall_pgm_loadimage(ebx, (void *)ecx, (unsigned long)edx);
+    break;
   case SYSCALL_FN_PGM_SETARGS:
     eax = syscall_pgm_setargs(ebx, (char *)ecx, edx);
+    break;
+  case SYSCALL_FN_PGM_GETARGS:
+    eax = syscall_pgm_getargs(ebx, (char *)ecx, edx);
     break;
   case SYSCALL_FN_PGM_START:
     eax = syscall_pgm_start(ebx, ecx);
@@ -163,6 +178,9 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
     break;
   case SYSCALL_FN_PGM_GETTASKQ:
     eax = syscall_pgm_gettaskq(ebx);
+    break;
+  case SYSCALL_FN_PGM_GETEXITCODE:
+    eax = syscall_pgm_getexitcode(ebx);
     break;
   case SYSCALL_FN_PGM_LIST:
     eax = syscall_pgm_list(ebx, ecx, (void*)edx);
@@ -243,7 +261,7 @@ int syscall_setcursor(int pos)
 }
 int syscall_exit(int c)
 {
-  task_exit(c);
+  task_exit(0x7fff & c);
   return 0;
 }
 int syscall_wait(int c)
@@ -251,25 +269,33 @@ int syscall_wait(int c)
   return alarm_wait(c);
 }
 
-int syscall_shm_create(int shmid, int size)
+int syscall_shm_create(unsigned int shmname, unsigned long size)
 {
-  return shm_create((unsigned int)shmid, (unsigned int)size);
+  return shm_create(shmname, size);
+}
+int syscall_shm_setname(int shmid, unsigned int shmname)
+{
+  return shm_setname(shmid, shmname);
+}
+int syscall_shm_lookup(unsigned int shmname)
+{
+  return shm_lookup(shmname);
 }
 int syscall_shm_delete(int shmid)
 {
-  return shm_delete((unsigned int)shmid);
+  return shm_delete(shmid);
 }
-int syscall_shm_getsize(int shmid,int sizep)
+int syscall_shm_getsize(int shmid, unsigned long *sizep)
 {
-  return shm_get_size((unsigned int)shmid, (unsigned int *)sizep);
+  return shm_get_size(shmid, sizep);
 }
-int syscall_shm_map(int shmid,int vmem)
+int syscall_shm_map(int shmid, void *vmem)
 {
-  return shm_map((unsigned int)shmid,page_get_current_pgd(), (void *)vmem,(PAGE_TYPE_USER|PAGE_TYPE_RDWR));
+  return shm_map(shmid, page_get_current_pgd(), vmem,(PAGE_TYPE_USER|PAGE_TYPE_RDWR));
 }
-int syscall_shm_unmap(int shmid, int vmem)
+int syscall_shm_unmap(int shmid, void *vmem)
 {
-  return shm_unmap((unsigned int)shmid,page_get_current_pgd(), (void *)vmem);
+  return shm_unmap(shmid, page_get_current_pgd(), vmem);
 }
 
 int syscall_que_create(unsigned int quename)
@@ -332,9 +358,21 @@ int syscall_pgm_load(char *filename, int type)
 {
   return program_load(filename, type);
 }
+int syscall_pgm_allocate(char *name, int type, unsigned long size)
+{
+  return program_allocate(name, type, size);
+}
+int syscall_pgm_loadimage(int taskid, void *image, unsigned long size)
+{
+  return program_loadimage(taskid, image, size);
+}
 int syscall_pgm_setargs(int taskid, char *args, int argsize)
 {
   return program_set_args(taskid, args, argsize);
+}
+int syscall_pgm_getargs(int taskid, char *args, int argsize)
+{
+  return program_get_args(taskid, args, argsize);
 }
 int syscall_pgm_start(int taskid, int exitque)
 {
@@ -351,6 +389,10 @@ int syscall_pgm_settaskq(int queid)
 int syscall_pgm_gettaskq(int taskid)
 {
   return program_get_taskque(taskid);
+}
+int syscall_pgm_getexitcode(int taskid)
+{
+  return program_get_exitcode(taskid);
 }
 
 int syscall_pgm_list(int start, int count, void *plist)

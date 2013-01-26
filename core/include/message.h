@@ -16,6 +16,7 @@ struct msg_list {
 };
 
 int message_init(void);
+int message_set_quename(int quename);
 int message_send(int queid, void *msg);
 int message_receive(int tryflg, int srv, int cmd, void *msgret);
 int message_poll(int tryflg, int srv, int cmd, void *vmsgret);
