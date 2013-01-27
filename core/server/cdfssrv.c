@@ -511,8 +511,18 @@ int cdfs_search_entry(char *buf, unsigned long buflen, char *filename, struct is
 //display_puts(s);
 //display_puts(")");
 //syscall_wait(10);
-    if((len==name_len && strncmp(filename,dirrec->name,len)==0) ||
-       (search_dot && dirrec->name_len==1 && dirrec->name[0]==0       )     ) {
+    if(len==name_len) {
+      char entry_name[CDFS_FULLPATH_MAXLENGTH];
+      int i;
+      for(i=0;i<name_len;i++) {
+        entry_name[i]=toupper(dirrec->name[i]);
+      }
+      if(strncmp(filename,entry_name,len)==0) {
+        *record = dirrec;
+        return 0;
+      }
+    }
+    else if(search_dot && dirrec->name_len==1 && dirrec->name[0]==0) {
       *record = dirrec;
       return 0;
     }
@@ -666,9 +676,11 @@ int cdfs_cmd_open(union cdfs_msg *cmd)
   for(;len>0;len--,fn++)
     *fn=toupper(*fn);
 
-  for(retry=0;retry<3;retry++) {
+  for(retry=0;retry<5;retry++) {
     desc_num = cdfs_open_descriptor(device,cmd->open.req.fullpath);
-    if(desc_num!=ERRNO_SCSI_UnitAttention)
+    // This is for the VirtualBox bug. VirtualBox reports not UnitAttention but also NotReady when Media Changing.
+    // And VirtualBox reports errors two times.
+    if(desc_num!=ERRNO_SCSI_UnitAttention && desc_num!=ERRNO_SCSI_NotReady)
       break;
   }
 

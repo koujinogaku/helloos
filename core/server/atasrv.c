@@ -78,11 +78,13 @@ enum {
   ATA_DIAG_CODE_SATA2	= 0x01699601,//Reserved for SATA
   ATA_DIAG_CODE_CEATA	= 0x01CEAA01,//Reserved for CE-ATA
 
-  // ATA command for HDD
+  // ATA command for All devices
+  ATA_ICMD_SET_FEATURES		= 0xef,
   ATA_ICMD_EXECUTE_DEVICE_DIAGNOSTIC=0x90,
+  // ATA command for ATA devices
   ATA_ICMD_IDENTIFY_DEVICE	= 0xec,
   ATA_ICMD_READ_SECTORS		= 0x20,
-  // ATA command for ATAPI device
+  // ATA command for ATAPI devices
   ATA_ICMD_DEVICE_RESET		= 0x08,
   ATA_ICMD_PACKET		= 0xa0,
   ATA_ICMD_IDENTIFY_PACKET_DEVICE= 0xa1,
@@ -93,11 +95,21 @@ enum {
   // Features
   ATA_FEATURE_DMA	= 0x01,  // Use DMA
   ATA_FEATURE_OVL	= 0x02,  // Overlapped command
+  ATA_FEATURE_DMADIR_TOHOST= 0x04,  // Packet DMA direction with SATA
 
   // ATA Interupt Reason
   ATA_IREASON_CD	= 0x01,  // 0:Data. 1:Command packet.
   ATA_IREASON_IO	= 0x02,  // 0:To the device. 1:To the host.
   ATA_IREASON_REL	= 0x04,  // 1:Bus release
+
+  // ATA SET FEATURES subcommands
+  ATA_SET_FEATURES_TRANSFER_MODE = 0x03,
+  // ATA SET FEATURES subcommands - TRANSFER_MODE
+  ATA_TRANSFER_MODE_PIO		= 0x00,
+  ATA_TRANSFER_MODE_DISABLE_IORDY= 0x01,
+  ATA_TRANSFER_MODE_PIO_FLOW	= 0x08,  // + mode number
+  ATA_TRANSFER_MODE_MWDMA	= 0x20,  // + mode number
+  ATA_TRANSFER_MODE_UDMA	= 0x40,  // + mode number
 
   // SCSI/ATAPI command
   ATAPI_CMD_TEST_UNIT_READY	= 0x00,
@@ -301,6 +313,56 @@ void *ata_shm_mapping(unsigned int shmname, unsigned long offset, unsigned long 
 //
 // ****************** Low Level Access to I/O Port *********************
 //
+static void ata_io_dsp_stat(char *msg, unsigned char res8)
+{
+  display_puts("*");
+  display_puts(msg);
+  display_puts(":Stat(");
+  byte2hex(res8,s);
+  display_puts(s);
+  display_puts(")=");
+  if(res8&ATA_STAT_ERR)
+    display_puts(" ERR");
+  if(res8&ATA_STAT_DRQ)
+    display_puts(" DRQ");
+  if(res8&ATA_STAT_DSC)
+    display_puts(" SERV");
+  if(res8&ATA_STAT_DF)
+    display_puts(" DF");
+  if(res8&ATA_STAT_DRDY)
+    display_puts(" DRDY");
+  if(res8&ATA_STAT_BUSY)
+    display_puts(" BUSY");
+  display_puts("*");
+}
+
+static void ata_io_dsp_err(char *msg, unsigned char res8)
+{
+  display_puts("*");
+  display_puts(msg);
+  display_puts(":ERR(");
+  byte2hex(res8,s);
+  display_puts(s);
+  display_puts(")=");
+  if(res8&ATA_ERR_ILI)
+    display_puts(" ILI");
+  if(res8&ATA_ERR_EOM)
+    display_puts(" EOM");
+  if(res8&ATA_ERR_ABRT)
+    display_puts(" ABRT");
+  if(res8&ATA_ERR_MCR)
+    display_puts(" MCR");
+  if(res8&ATA_ERR_IDNF)
+    display_puts(" IDNF");
+  if(res8&ATA_ERR_MC)
+    display_puts(" MC");
+  if(res8&ATA_ERR_UNC)
+    display_puts(" UNC");
+  if(res8&ATA_ERR_ICRC)
+    display_puts(" ICRC");
+  display_puts("*");
+}
+
 static void ata_io_delay_400ns(int port)
 {
    cpu_in8(ATA_ADR_ALTSTATUS|port);
@@ -378,11 +440,8 @@ static int ata_io_select_device(int port, int dev)
   rc=ata_io_wait_stat(port,ATA_STAT_BUSY|ATA_STAT_DRQ,0);
   if(rc<0) {
     if(rc != ERRNO_NOTEXIST) {
-display_puts("*wait_stat1inselect=");
 res8 = cpu_in8(ATA_ADR_ALTSTATUS|port);
-byte2hex(res8,s);
-display_puts(s);
-display_puts("*");
+ata_io_dsp_stat("wait_stat1inselect",res8);
       return rc;// return at not (ERRNO_NOTEXIST)
     }
   }
@@ -394,11 +453,8 @@ display_puts("*");
   rc=ata_io_wait_stat(port,ATA_STAT_BUSY|ATA_STAT_DRQ,0);
   if(rc<0) {
     if(rc != ERRNO_NOTEXIST) {
-display_puts("*wait_stat2inselect");
 res8 = cpu_in8(ATA_ADR_ALTSTATUS|port);
-byte2hex(res8,s);
-display_puts(s);
-display_puts("*");
+ata_io_dsp_stat("wait_stat2inselect",res8);
     }
     return rc;// return at all error
   }
@@ -495,22 +551,9 @@ int ata_read_pio_transfer(struct ata_device *device)
 //display_puts("*read_trn*");
   res8 = cpu_in8(ATA_ADR_STATUS | device->port);
   if(res8&ATA_STAT_ERR) {
-display_puts("*Status=");
-byte2hex(res8,s);
-display_puts(s);
-display_puts("*");
-display_puts("*ATA_STAT_ERR=");
+ata_io_dsp_stat("transfer",res8);
 res8 = cpu_in8(ATA_ADR_ERROR | device->port);
-byte2hex(res8,s);
-display_puts(s);
-/*
-display_puts("*");
-  rc = cpu_in8(ATA_ADR_SECTORCNT | device->port);
-display_puts("*ireason=");
-byte2hex(rc,s);
-display_puts(s);
-display_puts("*");
-*/
+ata_io_dsp_err("ERR1",res8);
     return ERRNO_NOTEXIST;
   }
 
@@ -527,20 +570,16 @@ display_puts("*");
 
   res8 = cpu_in8(ATA_ADR_ALTSTATUS|device->port);
   if(res8&ATA_STAT_ERR) {
-display_puts("*ATA_STAT_ERR2=");
+ata_io_dsp_stat("transfer",res8);
 res8 = cpu_in8(ATA_ADR_ERROR | device->port);
-byte2hex(res8,s);
-display_puts(s);
-display_puts("*");
+ata_io_dsp_err("ERR2",res8);
     return ERRNO_NOTEXIST;
   }
   res8 = cpu_in8(ATA_ADR_STATUS | device->port);
   if(res8&ATA_STAT_ERR) {
-display_puts("*ATA_STAT_ERR3=");
+ata_io_dsp_stat("transfer",res8);
 res8 = cpu_in8(ATA_ADR_ERROR | device->port);
-byte2hex(res8,s);
-display_puts(s);
-display_puts("*");
+ata_io_dsp_err("ERR3",res8);
     return ERRNO_NOTEXIST;
   }
 //if(lba) {
@@ -562,11 +601,9 @@ int ata_read_pio_done(struct ata_device *device)
   // Status
   res8 = cpu_in8(ATA_ADR_STATUS | device->port);
   if(res8&ATA_STAT_ERR) {
-display_puts("*ATA_STAT_ERRP=");
+ata_io_dsp_stat("done",res8);
 res8 = cpu_in8(ATA_ADR_ERROR | device->port);
-byte2hex(res8,s);
-display_puts(s);
-display_puts("*");
+ata_io_dsp_err("ERR1",res8);
     return ERRNO_NOTEXIST;
   }
 
@@ -1076,8 +1113,8 @@ int ata_execute_diagnostic(struct ata_device *device)
   if(rc<0) {
     if(rc!=ERRNO_NOTEXIST) {
       display_puts(" *DIAG ERROR1*");
-sint2dec(rc,s);
-display_puts(s);
+//sint2dec(rc,s);
+//display_puts(s);
     }
     return rc;
   }
@@ -1088,11 +1125,25 @@ display_puts(s);
 
   rc=ata_io_wait_stat(device->port,ATA_STAT_BUSY,0);
   if(rc<0) {
-display_puts(" *DIAG ERROR2*");
-sint2dec(rc,s);
-display_puts(s);
+//display_puts(" *DIAG ERROR2*");
+//sint2dec(rc,s);
+//display_puts(s);
     return rc;
   }
+
+  rc=ata_io_wait_intr(device,100);
+  if(rc<0) {
+//display_puts("(diag timeout)");
+    return rc;
+  }
+
+  unsigned char res8;
+  res8 = cpu_in8(ATA_ADR_ERROR | device->port);
+  if(res8!=(unsigned char)0x01 && res8!=(unsigned char)0x81 ) {
+//display_puts(" *DIAG ERROR3*");
+    return ERRNO_DEVICE;
+  }
+
   return 0;
 }
 
@@ -1127,6 +1178,7 @@ int ata_check_diag_status(struct ata_device *device, unsigned long *type)
   int rc;
   unsigned long device_type;
 
+  // this select is bug for VMWare
   rc = ata_io_select_device(device->port, device->dev);
   if(rc<0) {
     if(rc!=ERRNO_NOTEXIST) {
@@ -1140,30 +1192,34 @@ int ata_check_diag_status(struct ata_device *device, unsigned long *type)
   device_type |= (cpu_in8(ATA_ADR_LBAMID    | device->port) <<  8);
   device_type |= (cpu_in8(ATA_ADR_LBALOW    | device->port) <<  0);
 
-//  switch(device_type) {
-//  case ATA_DIAG_CODE_GENERAL:
+  switch(device_type) {
+  case ATA_DIAG_CODE_GENERAL:
 //    display_puts("ATA Device:");
-//    break;
-//  case ATA_DIAG_CODE_PACKET:
+    break;
+  case ATA_DIAG_CODE_PACKET:
 //    display_puts("ATAPI Device:");
-//    break;
-//  case ATA_DIAG_CODE_SATA1:
+    break;
+  case ATA_DIAG_CODE_SATA1:
 //    display_puts("SATA1 Device:");
-//    break;
-//  case ATA_DIAG_CODE_SATA2:
+    break;
+  case ATA_DIAG_CODE_SATA2:
 //    display_puts("SATA2 Device:");
-//    break;
-//  case ATA_DIAG_CODE_CEATA:
+    break;
+  case ATA_DIAG_CODE_CEATA:
 //    display_puts("CEATA Device:");
-//    break;
-//  default:
-//    display_puts("Unknown Device(");
-//    long2hex(device_type,s);
-//    display_puts(s);
-//    display_puts("):");
-//    break;
-//  }
+    break;
+  default:
+//display_puts("Unknown Device(");
+//long2hex(device_type,s);
+//display_puts(s);
+//display_puts("):");
+    return ERRNO_NOTEXIST;
+  }
 
+//display_puts("Device(");
+//long2hex(device_type,s);
+//display_puts(s);
+//display_puts("):");
   *type = device_type;
   return 0;
 }
@@ -1204,8 +1260,6 @@ int ata_decode_device_info(struct ata_device *device,unsigned short *databuff)
 
 
   device->p_type = (databuff[0]>>8)&0x001f;
-  if(device->p_type==0)
-    device->p_type=ATA_DEVTYPE_CD;
   display_puts(" Type=");
   switch(device->p_type) {
   case ATA_DEVTYPE_CD:
@@ -1216,6 +1270,7 @@ int ata_decode_device_info(struct ata_device *device,unsigned short *databuff)
     display_puts("Tape");
     device->sectorsize=0;
     break;
+  case 0:
   case ATA_DEVTYPE_HDD:
     display_puts("HardDisk");
     device->sectorsize=ATA_SECTOR_SIZE;
@@ -1230,6 +1285,10 @@ int ata_decode_device_info(struct ata_device *device,unsigned short *databuff)
   int2dec(device->p_type,s);
   display_puts(s);
   display_puts(")");
+
+  if(device->p_type==0)
+    device->p_type=ATA_DEVTYPE_HDD;
+
 
   if(databuff[0]&0x0080) {
     device->removable = 1;
@@ -1338,6 +1397,56 @@ int ata_decode_device_info(struct ata_device *device,unsigned short *databuff)
     display_puts(" PIO");
   }
 
+  if(databuff[80]&0x0010) {
+    display_puts(" ATAPI-4");
+  }
+  if(databuff[80]&0x0020) {
+    display_puts(" ATAPI-5");
+  }
+  if(databuff[80]&0x0040) {
+    display_puts(" ATAPI-6");
+  }
+  if(databuff[80]&0x0080) {
+    display_puts(" ATAPI-7");
+  }
+  if(databuff[80]&0x0100) {
+    display_puts(" ATA8-ACS");
+  }
+
+  if(databuff[88]&0x0001) { // Ultra DMA on ATA8-ACS
+    device->udma = 1;
+    device->udma_mode = 0;
+  }
+  if(databuff[88]&0x0002) {
+    device->udma = 1;
+    device->udma_mode = 1;
+  }
+  if(databuff[88]&0x0004) {
+    device->udma = 1;
+    device->udma_mode = 2;
+  }
+  if(databuff[88]&0x0008) {
+    device->udma = 1;
+    device->udma_mode = 3;
+  }
+  if(databuff[88]&0x0010) {
+    device->udma = 1;
+    device->udma_mode = 4;
+  }
+  if(databuff[88]&0x0020) {
+    device->udma = 1;
+    device->udma_mode = 5;
+  }
+  if(databuff[88]&0x0040) {
+    device->udma = 1;
+    device->udma_mode = 6;
+  }
+  if(device->udma) {
+    display_puts(" UDMA");
+    int2dec(device->udma_mode,s);
+    display_puts(s);
+  }
+
   if(databuff[82]&0x0200) {
     display_puts(" DRST");
   }
@@ -1379,11 +1488,16 @@ int ata_probe_device(struct ata_device *device, struct ata_interface *interface,
   device->next_func = -1;
   device->interface = interface;
 
+//  if(port==ATA_ADR_PRIMARY)
+//    display_puts("PRIMARY:");
+//  else
+//    display_puts("SECONDARY:");
+//  if(dev==ATA_DEV_MASTER)
+//    display_puts("MASTER ");
+//  else
+//    display_puts("SLAVE ");
+
   rc=ata_execute_diagnostic(device);
-  if(rc!=ERRNO_NOTEXIST) {
-    if(ata_io_wait_intr(device,100)<0)
-      display_puts("(reset timeout)");
-  }
   if(rc<0)
     return rc;
 
@@ -1400,6 +1514,7 @@ int ata_probe_device(struct ata_device *device, struct ata_interface *interface,
     device->dev  = dev|ATA_DEV_LBA;
     cmd = ATA_ICMD_IDENTIFY_DEVICE;
   }
+//  display_puts(" IDENTIFY ");
   rc = ata_read_pio(device, cmd, 0, 0, 0, &databuff, sizeof(databuff));
   if(rc<0)
     return rc;
