@@ -2,7 +2,6 @@
 ** floppy.c --- floppy disk driver
 */
 
-#include "config.h"
 #include "cpu.h"
 #include "string.h"
 #include "pic.h"
@@ -99,11 +98,11 @@ enum {
 };
 
 typedef struct {
-  byte sector_size_code;
-  byte sectors_per_track;
-  byte gap_length;
-  byte format_gap_length;
-  byte data_rate;
+  uint8_t sector_size_code;
+  uint8_t sectors_per_track;
+  uint8_t gap_length;
+  uint8_t format_gap_length;
+  uint8_t data_rate;
 } MediaInfo;
 
 static const MediaInfo media_info[4] =
@@ -121,8 +120,8 @@ struct fdc_drive_stat{
 
 static struct fdc_drive_stat fdc_drivestat[FDC_NUM_DRIVE];
 static int fdc_intr_qid=0;
-static void *fdc_dma_buffer;
-static byte fdc_current_drive=255;
+//static void *fdc_dma_buffer;
+static uint8_t fdc_current_drive=255;
 static int fdc_mutex=0;
 
 //static char s[64];
@@ -136,9 +135,9 @@ fdc_iodelay(int n)
 }
 
 static void
-fdc_motor_on( byte drive )
+fdc_motor_on( uint8_t drive )
 {
-  byte n;
+  uint8_t n;
 
   n = cpu_in8(FDC_PRI_DOR) | FDC_REST_ENABLE | FDC_DMA_ENABLE | (FDC_MOTA_START << drive);
   cpu_out8(FDC_PRI_DOR, n);
@@ -146,9 +145,9 @@ fdc_motor_on( byte drive )
 }
 
 static void
-fdc_motor_off( byte drive )
+fdc_motor_off( uint8_t drive )
 {
-  byte n;
+  uint8_t n;
   
   n = (cpu_in8(FDC_PRI_DOR) | FDC_REST_ENABLE | FDC_DMA_ENABLE)& ~(FDC_MOTA_START << drive);
   cpu_out8(FDC_PRI_DOR, n);
@@ -157,9 +156,9 @@ fdc_motor_off( byte drive )
 }
 
 static void
-fdc_select_drive( byte drive )
+fdc_select_drive( uint8_t drive )
 {
-  byte n;
+  uint8_t n;
 
   if(fdc_current_drive==drive)
     return;
@@ -182,16 +181,16 @@ fdc_check_disk_changed(void)
 */
 
 static void
-fdc_set_data_rate( byte rate )
+fdc_set_data_rate( uint8_t rate )
 {
   cpu_out8(FDC_PRI_CCR, rate);
 }
 
 static int
-fdc_wait_stat(byte mask, byte stat)
+fdc_wait_stat(uint8_t mask, uint8_t stat)
 {
-  byte ret;
-  byte retry=200;
+  uint8_t ret;
+  uint8_t retry=200;
 
   for(;;) {
     ret=cpu_in8(FDC_PRI_MSR);
@@ -206,7 +205,7 @@ fdc_wait_stat(byte mask, byte stat)
 }
 
 static int
-fdc_recv_result( byte *data, int count )
+fdc_recv_result( uint8_t *data, int count )
 {
   int i;
 
@@ -219,7 +218,7 @@ fdc_recv_result( byte *data, int count )
 }
 
 static int
-fdc_send_cmd( byte *data, int count )
+fdc_send_cmd( uint8_t *data, int count )
 {
   int i;
 
@@ -235,8 +234,8 @@ fdc_send_cmd( byte *data, int count )
 }
 
 static void
-fdc_set_stdcmd( byte *cmd, byte cmd_num, byte drive, byte head, byte cylinder,
-	      byte first_sector )
+fdc_set_stdcmd( uint8_t *cmd, uint8_t cmd_num, uint8_t drive, uint8_t head, uint8_t cylinder,
+	      uint8_t first_sector )
 {
   cmd[0] = cmd_num;
   cmd[1] = (head << 2) | drive;  // MT,MFM,SK,head,drive
@@ -313,10 +312,10 @@ fdc_wait_intr(void)
 }
 
 static int
-fdc_wait_sense_intr_stat( byte *stat )
+fdc_wait_sense_intr_stat( uint8_t *stat )
 {
   int r;
-  byte cmd[] = { FDC_CMD_SENSE_INTERRUPT_STAT };
+  uint8_t cmd[] = { FDC_CMD_SENSE_INTERRUPT_STAT };
 
   if( (r=fdc_wait_intr())<0 )
     return r;
@@ -331,7 +330,7 @@ fdc_wait_sense_intr_stat( byte *stat )
 }
 
 static int
-fdc_wait_recv_result( byte *result )
+fdc_wait_recv_result( uint8_t *result )
 {
   int r;
 
@@ -348,7 +347,7 @@ static int
 fdc_reset(void)
 {
   int r;
-  byte statdmy[2];
+  uint8_t statdmy[2];
 
   cpu_out8(FDC_PRI_DOR, FDC_DMA_ENABLE);                   // FDC DMA enable
   fdc_iodelay(1);
@@ -364,9 +363,9 @@ fdc_reset(void)
 }
 
 static int
-fdc_cmd_seek( byte drive, byte head, byte cylinder )
+fdc_cmd_seek( uint8_t drive, uint8_t head, uint8_t cylinder )
 {
-  byte cmd[3], stat[2];
+  uint8_t cmd[3], stat[2];
   int r;
 
   if(drive >= FDC_NUM_DRIVE)
@@ -402,10 +401,10 @@ fdc_cmd_seek( byte drive, byte head, byte cylinder )
 }
 
 static int
-fdc_cmd_recalibrate( byte drive )
+fdc_cmd_recalibrate( uint8_t drive )
 {
-  byte stat[2];
-  byte cmd[2];
+  uint8_t stat[2];
+  uint8_t cmd[2];
   int r;
 
   if(drive >= FDC_NUM_DRIVE)
@@ -428,9 +427,9 @@ fdc_cmd_recalibrate( byte drive )
 }
 
 static int
-fdc_cmd_write_data( byte drive, byte head, byte cylinder, byte sector )
+fdc_cmd_write_data( uint8_t drive, uint8_t head, uint8_t cylinder, uint8_t sector )
 {
-  byte cmd[9], result[7];
+  uint8_t cmd[9], result[7];
   int r;
   
   fdc_set_stdcmd(cmd, FDC_CMD_WRITE_DATA,
@@ -448,9 +447,9 @@ fdc_cmd_write_data( byte drive, byte head, byte cylinder, byte sector )
 }
 
 static int
-fdc_cmd_read_data( byte drive, byte head, byte cylinder, byte sector )
+fdc_cmd_read_data( uint8_t drive, uint8_t head, uint8_t cylinder, uint8_t sector )
 {
-  byte cmd[9], result[7];
+  uint8_t cmd[9], result[7];
   int r;
 
   fdc_set_stdcmd(cmd, FDC_CMD_READ_DATA,
@@ -495,7 +494,7 @@ floppy_init( void )
 {
   int i;
   int r;
-  byte cmd[] = { FDC_CMD_SPECIFY,
+  uint8_t cmd[] = { FDC_CMD_SPECIFY,
                  0xc1, // SRT = 4ms HUT = 16ms
                  0x10  // HLT = 16ms DMA
                };
@@ -506,8 +505,10 @@ floppy_init( void )
     return ERRNO_RESOURCE;
   }
   memset( &fdc_drivestat, 0, sizeof(fdc_drivestat) );
-  fdc_dma_buffer = (byte*)mem_alloc(FDC_SECSIZE);
-  if(fdc_dma_buffer==0) {
+  //fdc_dma_buffer = (uint8_t*)mem_alloc(FDC_SECSIZE);
+  //if(fdc_dma_buffer==0) {
+  r=dma_alloc_buffer(DMA_CHANNEL_FDD,FDC_SECSIZE);
+  if(r<0) {
     queue_destroy(fdc_intr_qid);
     fdc_intr_qid=0;
     return ERRNO_RESOURCE;
@@ -516,9 +517,10 @@ floppy_init( void )
   r=intr_regist_receiver(PIC_IRQ_FDC,fdc_intr_qid);
   if(r<0) {
     queue_destroy(fdc_intr_qid);
-    mem_free(fdc_dma_buffer,FDC_SECSIZE);
     fdc_intr_qid=0;
-    fdc_dma_buffer=0;
+    //mem_free(fdc_dma_buffer,FDC_SECSIZE);
+    //fdc_dma_buffer=0;
+    dma_free_buffer(DMA_CHANNEL_FDD);
     return ERRNO_RESOURCE;
   }
 
@@ -542,7 +544,7 @@ floppy_init( void )
 }
 
 int
-floppy_open( byte drive )
+floppy_open( uint8_t drive )
 {
   int r;
   if( drive >= FDC_NUM_DRIVE )
@@ -568,7 +570,7 @@ floppy_open( byte drive )
 }
 
 int
-floppy_close(byte drive)
+floppy_close(uint8_t drive)
 {
   if( drive >= FDC_NUM_DRIVE )
     return ERRNO_NOTEXIST;
@@ -583,9 +585,9 @@ floppy_close(byte drive)
 }
 
 int
-floppy_write_sector( byte drive, void *buf, unsigned int sector, unsigned int count )
+floppy_write_sector( uint8_t drive, void *buf, unsigned int sector, unsigned int count )
 {
-  byte h, c, s;
+  uint8_t h, c, s;
   int i;
   int r;
 
@@ -605,15 +607,17 @@ floppy_write_sector( byte drive, void *buf, unsigned int sector, unsigned int co
     s = (sector + i) % FDC_SECPTRK + 1;
 
     /* copy to DMA buffer */
-    memcpy( fdc_dma_buffer, buf + i*FDC_SECSIZE, FDC_SECSIZE );
+    //memcpy( fdc_dma_buffer, buf + i*FDC_SECSIZE, FDC_SECSIZE );
+    dma_push_buffer(DMA_CHANNEL_FDD, buf + i*FDC_SECSIZE);
 
     /* setup DMA channel 2 */
-    BEGIN_CPULOCK();
-    dma_disable(2);
-    dma_set_area(2, (unsigned int)fdc_dma_buffer, FDC_SECSIZE-1);
-    dma_set_mode(2, DMA_MODE_READ | DMA_MODE_SINGLE | DMA_MODE_INCL);
-    dma_enable(2);
-    END_CPULOCK();
+    //BEGIN_CPULOCK();
+    dma_enable(DMA_CHANNEL_FDD, DMA_DISABLE);
+    //dma_set_area(DMA_CHANNEL_FDD, (unsigned int)fdc_dma_buffer, FDC_SECSIZE-1);
+    dma_set_buffer(DMA_CHANNEL_FDD);
+    dma_set_mode(DMA_CHANNEL_FDD, DMA_MODE_READ | DMA_MODE_SINGLE | DMA_MODE_INCL);
+    dma_enable(DMA_CHANNEL_FDD, DMA_ENABLE);
+    //END_CPULOCK();
 
     /* seek */
     if( (r=fdc_cmd_seek(drive, h, c))<0 ) {
@@ -632,9 +636,9 @@ floppy_write_sector( byte drive, void *buf, unsigned int sector, unsigned int co
 }
 
 int
-floppy_read_sector( byte drive, void *buf, unsigned int sector, unsigned int count )
+floppy_read_sector( uint8_t drive, void *buf, unsigned int sector, unsigned int count )
 {
-  byte h, c, s;
+  uint8_t h, c, s;
   int i;
   int r;
 //  int ii;
@@ -655,12 +659,13 @@ floppy_read_sector( byte drive, void *buf, unsigned int sector, unsigned int cou
     s = (sector + i) % FDC_SECPTRK + 1;
 
     /* setup DMA channel 2 */
-    BEGIN_CPULOCK();
-    dma_disable(2);
-    dma_set_area(2, (unsigned int)fdc_dma_buffer, FDC_SECSIZE-1);
-    dma_set_mode(2, DMA_MODE_WRITE | DMA_MODE_SINGLE | DMA_MODE_INCL);
-    dma_enable(2);
-    END_CPULOCK();
+    //BEGIN_CPULOCK();
+    dma_enable(DMA_CHANNEL_FDD, DMA_DISABLE);
+    //dma_set_area(DMA_CHANNEL_FDD, (unsigned int)fdc_dma_buffer, FDC_SECSIZE-1);
+    dma_set_buffer(DMA_CHANNEL_FDD);
+    dma_set_mode(DMA_CHANNEL_FDD, DMA_MODE_WRITE | DMA_MODE_SINGLE | DMA_MODE_INCL);
+    dma_enable(DMA_CHANNEL_FDD, DMA_ENABLE);
+    //END_CPULOCK();
 
     /* seek */
     if( (r=fdc_cmd_seek(drive, h, c))<0) {
@@ -682,7 +687,8 @@ floppy_read_sector( byte drive, void *buf, unsigned int sector, unsigned int cou
 
 
     /* copy from DMA buffer */
-    memcpy( buf + i*FDC_SECSIZE, fdc_dma_buffer, FDC_SECSIZE );
+    //memcpy( buf + i*FDC_SECSIZE, fdc_dma_buffer, FDC_SECSIZE );
+    dma_pull_buffer(DMA_CHANNEL_FDD, buf + i*FDC_SECSIZE );
   }
 
   mutex_unlock(&fdc_mutex);

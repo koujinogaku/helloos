@@ -159,6 +159,7 @@ struct ata_device {
   unsigned udma       :1;
   unsigned udma_mode  :3;
   unsigned dmadir     :1;
+  unsigned accessDMA  :1;
   int *info;
 };
 
@@ -201,7 +202,8 @@ static struct ata_device ata_device[4];
 static int ata_device_num=0;
 static char s[16];
 static int ata_queid=0;
-
+//static int ata_dma_channel = SYSCALL_DMA_CHANNEL_ATA;
+static int ata_dma_channel = 7;
 //
 // ****************** Low Level Access to I/O Port *********************
 //
@@ -719,6 +721,8 @@ int2dec(-rc,s);
 display_puts("intr rc=");
 display_puts(s);
 display_puts(" error");
+if(rc==ERRNO_TIMEOUT)
+  display_puts(" Command Timeout");
     return rc;
   }
 
@@ -768,10 +772,13 @@ display_puts("*recv=");
 int2dec(readsize,s);
 display_puts(s);
 display_puts("*");
-  ata_io_read_data(device->port, readsize, bufp, bytesize);
+  if(readsize>0 && !(device->accessDMA)) {
+display_puts("*pioRead*");
+    ata_io_read_data(device->port, readsize, bufp, bytesize);
+  }
 
 // ******************** Awaiting Data transmission *****************
-  if(bytesize>0) {
+  if(readsize>0||device->accessDMA) {
     rc = ata_wait_intr(device, 100);
     if(rc<0) {
 display_puts("*wait-trn=");
@@ -987,17 +994,36 @@ display_puts("*allow_medium_removal error*");
 int atapi_read_10(struct ata_device *device, unsigned long lba)
 {
   static char cmd[12] = { ATAPI_CMD_READ_10, 0, 0, 0, 0, 0,  0,0,0,0,0,0};
-  int feature = 0;//ATA_FEATURE_OVL;
+  int feature;
   int sensekey;
 
-  int allocsize = 32768; //ATAPI_SECTOR_SIZE;
+  int allocsize;
   char *scsibuff;
   int readcount;
   int i;
+  int rc;
 
+  if(device->accessDMA) {
+    feature = ATA_FEATURE_DMA;
+    allocsize = 0;
+    scsibuff = 0;
+    rc=syscall_dma_enable(ata_dma_channel,SYSCALL_DMA_DISABLE);
+    if(rc<0)
+      return rc;
+    rc=syscall_dma_setmode(ata_dma_channel,SYSCALL_DMA_MODE_WRITE | SYSCALL_DMA_MODE_SINGLE | SYSCALL_DMA_MODE_INCL);
+    if(rc<0)
+      return rc;
+    rc=syscall_dma_enable(ata_dma_channel,SYSCALL_DMA_ENABLE);
+    if(rc<0)
+      return rc;
+  }
+  else {
+    feature = 0;
+    allocsize = ATAPI_SECTOR_SIZE;
+    scsibuff=malloc(allocsize);
+    memset(scsibuff,0,allocsize);
+  }
 display_puts("\n*read_10*");
-  scsibuff=malloc(allocsize);
-  memset(scsibuff,0,allocsize);
 
   cmd[2] = (lba >> 24) & 0xFF;   // most sig. byte of LBA
   cmd[3] = (lba >> 16) & 0xFF;
@@ -1009,8 +1035,16 @@ display_puts("\n*read_10*");
   readcount = ata_packet_pio(device, feature, cmd, sizeof(cmd), scsibuff, allocsize, &sensekey);
   if(readcount<0) {
 display_puts("*read_10 error*");
-    mfree(scsibuff);
+    if(scsibuff)
+      mfree(scsibuff);
     return readcount;
+  }
+
+  if(device->accessDMA) {
+    allocsize = ATAPI_SECTOR_SIZE;
+    scsibuff=malloc(allocsize);
+    memset(scsibuff,0,allocsize);
+    syscall_dma_pullbuffer(ata_dma_channel,scsibuff);
   }
 
   display_puts("\n");
@@ -1215,6 +1249,7 @@ static void swap_string(void *bufp, int size)
 int ata_set_features(struct ata_device *device, int feature,int *count, unsigned long *lba)
 {
   int rc;
+  unsigned char res8;
   // select device
   rc = ata_io_select_device(device->port, device->dev);
   if(rc<0) {
@@ -1222,8 +1257,16 @@ int ata_set_features(struct ata_device *device, int feature,int *count, unsigned
     return rc;
   }
 
-  cpu_out8(ATA_ADR_FEATURES | device->port, feature);
+  cpu_out8(ATA_ADR_FEATURES  | device->port, feature);
+  if(count)
+    cpu_out8(ATA_ADR_SECTORCNT | device->port, *count);
   ata_io_delay_400ns(device->port);
+  if(lba) {
+    cpu_out8(ATA_ADR_LBALOW   | device->port, (*lba)&0x00ff);
+    cpu_out8(ATA_ADR_LBAMID   | device->port, ((*lba)>>8)&0x00ff);
+    cpu_out8(ATA_ADR_LBAHIGH  | device->port, ((*lba)>>16)&0x00ff);
+    cpu_out8(ATA_ADR_HEAD_DEV | device->port, device->dev|(((*lba)>>24)&0x000f) );
+  }
 
   // Command
   cpu_out8(ATA_ADR_COMMAND | device->port, ATA_ICMD_SET_FEATURES);
@@ -1231,9 +1274,24 @@ int ata_set_features(struct ata_device *device, int feature,int *count, unsigned
 
   rc=ata_io_wait_stat(device->port,ATA_STAT_BUSY,0);
   if(rc<0) {
-    display_puts(" *DIAG ERROR*");
+    display_puts(" *FEATURE ERROR*");
     return rc;
   }
+
+  rc = ata_wait_intr(device, 100);
+  if(rc<0) {
+    display_puts(" *FEATURE TIMEOUT*");
+    return rc;
+  }
+
+  res8 = cpu_in8(ATA_ADR_STATUS | device->port);
+  if(res8&ATA_STAT_ERR) {
+    ata_io_dsp_stat("FEATURE",res8);
+    res8 = cpu_in8(ATA_ADR_ERROR | device->port);
+    ata_io_dsp_err("FEATURE",res8);
+    return ERRNO_DEVICE;
+  }
+
   return 1;
 }
 
@@ -1383,63 +1441,8 @@ display_puts("):");
   return 0;
 }
 
-int ata_probe_device(struct ata_device *device, int id, int port, int dev)
+int ata_decode_device_info(struct ata_device *device,unsigned short *databuff)
 {
-  unsigned short databuff[256];
-  char infostr[80];
-  int rc;
-  unsigned long device_type;
-
-  if(port==ATA_ADR_PRIMARY)
-    display_puts("PRIMARY:");
-  else
-    display_puts("SECONDARY:");
-  if(dev==ATA_DEV_MASTER)
-    display_puts("MASTER ");
-  else
-    display_puts("SLAVE ");
-
-clear_msg("probe");
-
-display_puts("\n******id=");
-int2dec(id,s);
-display_puts(s);
-display_puts("******\n");
-
-  memset(device,0,sizeof(struct ata_device));
-  device->id   = id;
-  device->port = port;
-  device->dev  = dev|ATA_DEV_ATAPI;
-  device->phase = 0;
-
-  rc = ata_execute_diagnostic(device);
-clear_msg("aftdiag");
-  if(rc<0)
-    return rc;
-
-  //ata_check_diag_status(device,&device_type);
-  //ata_reset_atapi_device(device);
-
-  rc=ata_check_diag_status(device,&device_type);
-clear_msg("aftchkrst");
-  if(rc<0)
-    return rc;
-
-  int cmd;
-  if(device_type==ATA_DIAG_CODE_PACKET) {
-    device->dev  = dev|ATA_DEV_ATAPI;
-    cmd = ATA_ICMD_IDENTIFY_PACKET_DEVICE;
-display_puts("(Try ATAPI)");
-  }
-  else {
-    device->dev  = dev|ATA_DEV_LBA;
-    cmd = ATA_ICMD_IDENTIFY_DEVICE;
-display_puts("(Try ATA)");
-  }
-  rc = ata_read_pio(device, cmd, 0, 0, 0, &databuff, sizeof(databuff));
-clear_msg("aftidentify");
-  if(rc<0)
-    return rc;
 
   if((databuff[0]&0x8000)==0) {
     device->i_type = ATA_TYPE_ATA;
@@ -1655,6 +1658,7 @@ clear_msg("aftidentify");
   infostr[8]=0;
   display_puts(infostr);
 */
+  char infostr[80];
   display_puts(" Model=");
   memcpy(infostr,&databuff[27],40);
   swap_string(infostr,40);
@@ -1667,6 +1671,84 @@ clear_msg("aftidentify");
 
   display_puts("\n");
   return 1;
+}
+
+
+int ata_probe_device(struct ata_device *device, int id, int port, int dev)
+{
+  unsigned short databuff[256];
+  int rc;
+  unsigned long device_type;
+
+display_puts("\n******id=");
+int2dec(id,s);
+display_puts(s);
+display_puts("******\n");
+
+  if(port==ATA_ADR_PRIMARY)
+    display_puts("PRIMARY:");
+  else
+    display_puts("SECONDARY:");
+  if(dev==ATA_DEV_MASTER)
+    display_puts("MASTER ");
+  else
+    display_puts("SLAVE ");
+
+clear_msg("probe");
+
+  memset(device,0,sizeof(struct ata_device));
+  device->id   = id;
+  device->port = port;
+  device->dev  = dev|ATA_DEV_ATAPI;
+  device->phase = 0;
+
+  rc = ata_execute_diagnostic(device);
+clear_msg("aftdiag");
+  if(rc<0)
+    return rc;
+
+  //ata_check_diag_status(device,&device_type);
+  //ata_reset_atapi_device(device);
+
+  rc=ata_check_diag_status(device,&device_type);
+clear_msg("aftchkrst");
+  if(rc<0)
+    return rc;
+
+  int cmd;
+  if(device_type==ATA_DIAG_CODE_PACKET) {
+    device->dev  = dev|ATA_DEV_ATAPI;
+    cmd = ATA_ICMD_IDENTIFY_PACKET_DEVICE;
+display_puts("(Try ATAPI)");
+  }
+  else {
+    device->dev  = dev|ATA_DEV_LBA;
+    cmd = ATA_ICMD_IDENTIFY_DEVICE;
+display_puts("(Try ATA)");
+  }
+  rc = ata_read_pio(device, cmd, 0, 0, 0, &databuff, sizeof(databuff));
+clear_msg("aftidentify");
+  if(rc<0)
+    return rc;
+
+  ata_decode_device_info(device,databuff);
+  device->accessDMA = 0;
+
+//  if(!device->mwdma)
+//    return 0;
+
+//  int mode=device->mwdma_mode;
+//  int count=ATA_TRANSFER_MODE_MWDMA+mode;
+//  rc=ata_set_features(device, ATA_SET_FEATURES_TRANSFER_MODE, &count, 0);
+//clear_msg("aftfeatures");
+//  if(rc<0) {
+//display_puts("*mwdma set feature error*");
+//    return rc;
+//  }
+//
+//  device->accessDMA = 1;
+
+  return 0;
 }
 
 
@@ -1743,14 +1825,19 @@ display_puts("*intrON*");
   }
   // probe devices
   ata_device_num=0;
-  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_PRIMARY,   ATA_DEV_MASTER)>0)
+  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_PRIMARY,   ATA_DEV_MASTER)>=0)
     ata_device_num++;
-  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_PRIMARY,   ATA_DEV_SLAVE)>0)
+  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_PRIMARY,   ATA_DEV_SLAVE)>=0)
     ata_device_num++;
-  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_SECONDARY, ATA_DEV_MASTER)>0)
+  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_SECONDARY, ATA_DEV_MASTER)>=0)
     ata_device_num++;
-  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_SECONDARY, ATA_DEV_SLAVE)>0)
+  if(ata_probe_device(&ata_device[ata_device_num], ata_device_num, ATA_ADR_SECONDARY, ATA_DEV_SLAVE)>=0)
     ata_device_num++;
+
+//  rc=syscall_dma_allocbuffer(ata_dma_channel,ATAPI_SECTOR_SIZE);
+//  if(rc<0) {
+//display_puts("*dma setup error*");
+//  }
 
   return 0;
 }
@@ -1811,11 +1898,11 @@ static int test_atapi_access(struct ata_device *device)
 
 //  ata_device_reset(device);
 
-    rc = atapi_test_unit_ready(device);
-    if(rc<0) {
-display_puts("*error*");
-      //return rc;
-    }
+//    rc = atapi_test_unit_ready(device);
+//    if(rc<0) {
+//display_puts("*error*");
+//      //return rc;
+//    }
 
 //    rc = atapi_get_event_status_notification(device);
 //    if(rc<0) {
@@ -1847,13 +1934,13 @@ display_puts("*error*");
 //    return rc;
 //  }
 
-//    unsigned long lba;
-//    lba = 16; // primary volume descriptor
-//    rc = atapi_read_10(device,lba);
-//    if(rc<0) {
-//  display_puts("*error exit*");
-//      return rc;
-//    }
+    unsigned long lba;
+    lba = 16; // primary volume descriptor
+    rc = atapi_read_10(device,lba);
+    if(rc<0) {
+  display_puts("*error exit*");
+      return rc;
+    }
 
 //    rc = atapi_request_sense(device);
 //    if(rc<0)
@@ -1972,10 +2059,8 @@ display_puts(" *packet comand error*");
   return 1;
 }
 
-
 int start(int ac, char *av[])
 {
-
   ata_init();
 
   display_puts("***************************\n");

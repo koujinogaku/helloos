@@ -25,8 +25,9 @@ TSTATA= tstata.o
 TSTATAC= tstatac.o
 TSTISO= tstiso.o
 TSTCDFS= tstcdfs.o
+TSTPCI= tstpci.o
 
-all: tstata.out tstatac.out tstiso.out tstcdfs.out #tst.out tst2.out #tstdemox.out #tstnanox.out #tstmouse.out testmwin.out 
+all: tstata.out tstatac.out tstiso.out tstcdfs.out #tstpci.out #tst.out tst2.out #tstdemox.out #tstnanox.out #tstmouse.out testmwin.out 
 
 tst.out: $(TST) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TST) $(APPLIB) -o $@
@@ -57,6 +58,9 @@ tstiso.out: $(TSTISO) $(APPLIB)
 
 tstcdfs.out: $(TSTCDFS) $(APPLIB)
 	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TSTCDFS) $(APPLIB) -o $@
+
+tstpci.out: $(TSTPCI) $(APPLIB)
+	$(LD) -T $(LSFILE) -Map $*.map --cref $(STARTOBJ) $(TSTPCI) $(APPLIB) -o $@
 
 #%.a: %.o
 #	$(AR) r $@ $?

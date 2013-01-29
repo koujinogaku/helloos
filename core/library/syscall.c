@@ -86,10 +86,10 @@ int syscall_wait(int c)
   return r;
 }
 
-int syscall_shm_create(unsigned int shmname, unsigned long size)
+int syscall_shm_create(unsigned int shmname, unsigned long size, unsigned int options)
 {
   int r=0;
-  SYSCALL_2(SYSCALL_FN_SHM_CREATE, r, shmname, size);
+  SYSCALL_3(SYSCALL_FN_SHM_CREATE, r, shmname, size, options);
   return r;
 }
 int syscall_shm_setname(int shmid, unsigned int shmname)
@@ -127,6 +127,18 @@ int syscall_shm_unmap(int shmid, void *vmem)
 {
   int r=0;
   SYSCALL_2(SYSCALL_FN_SHM_UNMAP, r, shmid, vmem);
+  return r;
+}
+int syscall_shm_getphysical(int shmid, unsigned int pagenum, unsigned long *addr)
+{
+  int r=0;
+  SYSCALL_3(SYSCALL_FN_SHM_GETPHYSICAL, r, shmid, pagenum, addr);
+  return r;
+}
+int syscall_shm_pull(int shmid, unsigned int pagenum, void *addr)
+{
+  int r=0;
+  SYSCALL_3(SYSCALL_FN_SHM_PULL, r, shmid, pagenum, addr);
   return r;
 }
 
@@ -374,5 +386,47 @@ int syscall_mtx_unlock(int *mutex)
 {
   int r=0;
   SYSCALL_1(SYSCALL_FN_MTX_UNLOCK, r, mutex);
+  return r;
+}
+int syscall_dma_setmode( unsigned int channel, unsigned int mode )
+{
+  int r=0;
+  SYSCALL_2(SYSCALL_FN_DMA_SETMODE, r, channel, mode);
+  return r;
+}
+int syscall_dma_enable( unsigned int channel, unsigned int sw )
+{
+  int r=0;
+  SYSCALL_2(SYSCALL_FN_DMA_ENABLE, r, channel, sw);
+  return r;
+}
+int syscall_dma_allocbuffer(unsigned int channel, unsigned long size)
+{
+  int r=0;
+  SYSCALL_2(SYSCALL_FN_DMA_ALLOCBUFFER, r, channel, size);
+  return r;
+}
+int syscall_dma_freebuffer(unsigned int channel)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_DMA_FREEBUFFER, r, channel);
+  return r;
+}
+int syscall_dma_setbuffer(unsigned int channel)
+{
+  int r=0;
+  SYSCALL_1(SYSCALL_FN_DMA_SETBUFFER, r, channel);
+  return r;
+}
+int syscall_dma_pushbuffer(unsigned int channel, void* buf)
+{
+  int r=0;
+  SYSCALL_2(SYSCALL_FN_DMA_PUSHBUFFER, r, channel, buf);
+  return r;
+}
+int syscall_dma_pullbuffer(unsigned int channel, void* buf)
+{
+  int r=0;
+  SYSCALL_2(SYSCALL_FN_DMA_PULLBUFFER, r, channel, buf);
   return r;
 }

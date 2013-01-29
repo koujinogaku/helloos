@@ -19,7 +19,7 @@ static unsigned long shm_mapping_address = CFG_MEM_SHMSTART;
 
 int shm_create(unsigned int shmname, unsigned long size)
 {
-  return syscall_shm_create(shmname, size);
+  return syscall_shm_create(shmname, size, 0);
 }
 
 int shm_setname(int shmid, unsigned int shmname)

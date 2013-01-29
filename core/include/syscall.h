@@ -56,11 +56,20 @@
 #define SYSCALL_FN_PGM_GETTASKQ  47
 #define SYSCALL_FN_KRN_GET_SYSTIME 48
 #define SYSCALL_FN_PGM_GETEXITCODE 49
-#define SYSCALL_FN_PGM_GETARGS   50
-#define SYSCALL_FN_SHM_SETNAME   51
-#define SYSCALL_FN_SHM_LOOKUP    52
-#define SYSCALL_FN_PGM_ALLOCATE  53
-#define SYSCALL_FN_PGM_LOADIMAGE 54
+#define SYSCALL_FN_PGM_GETARGS     50
+#define SYSCALL_FN_SHM_SETNAME     51
+#define SYSCALL_FN_SHM_LOOKUP      52
+#define SYSCALL_FN_PGM_ALLOCATE    53
+#define SYSCALL_FN_PGM_LOADIMAGE   54
+#define SYSCALL_FN_SHM_GETPHYSICAL 55
+#define SYSCALL_FN_SHM_PULL        56
+#define SYSCALL_FN_DMA_SETMODE     57
+#define SYSCALL_FN_DMA_ENABLE      58
+#define SYSCALL_FN_DMA_ALLOCBUFFER 59
+#define SYSCALL_FN_DMA_FREEBUFFER  60
+#define SYSCALL_FN_DMA_SETBUFFER   61
+#define SYSCALL_FN_DMA_PUSHBUFFER  62
+#define SYSCALL_FN_DMA_PULLBUFFER  63
 
 void syscall_init(void);
 
@@ -73,13 +82,16 @@ int syscall_puts(char *s);
 int syscall_exit(int c);
 int syscall_wait(int c);
 
-int syscall_shm_create(unsigned int shmname, unsigned long size);
+#define SYSCALL_SHM_OPT_KERNEL 0x01
+int syscall_shm_create(unsigned int shmname, unsigned long size, unsigned int options);
 int syscall_shm_setname(int shmid, unsigned int shmname);
 int syscall_shm_lookup(unsigned int shmname);
 int syscall_shm_delete(int shmid);
 int syscall_shm_getsize(int shmid, unsigned long *sizep);
 int syscall_shm_map(int shmid, void *vmem);
 int syscall_shm_unmap(int shmid, void *vmem);
+int syscall_shm_getphysical(int shmid, unsigned int pagenum, unsigned long *addr);
+int syscall_shm_pull(int shmid, unsigned int pagenum, void *addr);
 
 int syscall_que_create(unsigned int quename);
 int syscall_que_setname(int queid, unsigned int quename);
@@ -126,6 +138,29 @@ int syscall_krn_memory_status(unsigned long *status);
 int syscall_krn_get_systime(void *systime);
 int syscall_alarm_set(unsigned int alarmtime, int queid, int arg);
 int syscall_alarm_unset(int alarmid, int queid);
+
+#define SYSCALL_DMA_MODE_VERIFY   0x00
+#define SYSCALL_DMA_MODE_WRITE    0x04
+#define SYSCALL_DMA_MODE_READ     0x08
+#define SYSCALL_DMA_MODE_AUTOINIT 0x10
+#define SYSCALL_DMA_MODE_INCL     0x00
+#define SYSCALL_DMA_MODE_DECL     0x20
+#define SYSCALL_DMA_MODE_DEMAND   0xc0
+#define SYSCALL_DMA_MODE_SINGLE   0x40
+#define SYSCALL_DMA_MODE_BLOCK    0x80
+#define SYSCALL_DMA_MODE_CASCADE  0xc0
+#define SYSCALL_DMA_CHANNEL_FDD     0x02
+#define SYSCALL_DMA_CHANNEL_XTDISK  0x03
+#define SYSCALL_DMA_CHANNEL_CASCADE 0x04
+#define SYSCALL_DMA_ENABLE        1
+#define SYSCALL_DMA_DISABLE       0
+int syscall_dma_setmode( unsigned int channel, unsigned int mode );
+int syscall_dma_enable( unsigned int channel, unsigned int sw );
+int syscall_dma_allocbuffer(unsigned int channel, unsigned long size);
+int syscall_dma_freebuffer(unsigned int channel);
+int syscall_dma_setbuffer(unsigned int channel);
+int syscall_dma_pushbuffer(unsigned int channel, void* buf);
+int syscall_dma_pullbuffer(unsigned int channel, void* buf);
 
 
 int syscall_intr_regist(int irq, int queid);

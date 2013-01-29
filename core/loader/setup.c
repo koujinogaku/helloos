@@ -224,6 +224,38 @@ bios_get_memsize(void)
 }
 #endif
 
+#pragma GCC pop_options
+
+static void screen_backup(void)
+{
+  int x,y;
+  int i=0;
+
+  for(y=0;y<25;y++) {
+    for(x=0;x<80;x++) {
+      if(i>=IPL_SCREENBUFSZ)
+        break;
+      screen_backup_buff[i]=bios_getscreen(x,y);
+      i++;
+    }
+  }
+}
+static void screen_restore(void)
+{
+  int i;
+
+  bios_setcursor(0, 0);
+  for(i=0;i<IPL_SCREENBUFSZ-1;i++) {
+    if(screen_backup_buff[i]>=' ')
+      bios_putc(screen_backup_buff[i]);
+    else
+      bios_putc(' ');
+  }
+}
+
+#pragma GCC push_options
+#pragma GCC optimize("O0")
+
 inline int
 bios_set_vesamode(int mode)
 {
@@ -231,6 +263,7 @@ bios_set_vesamode(int mode)
     word32 ret;
     unsigned int wd,ht,depth;
     unsigned long vram;
+    vbe_info_t *vbe_info=(void*)CFG_MEM_TMPVESAINFO;
 
     asm volatile( 
                  "mov %%ax,    %%di \n"
@@ -243,7 +276,7 @@ bios_set_vesamode(int mode)
     if(ret!=0x004f) {
       return ret;
     }
-    if(((vbe_info_t *)CFG_MEM_TMPVESAINFO)->ver_major < 2) {
+    if(vbe_info->ver_major < 2) {
       return 1;
     }
 
@@ -300,32 +333,6 @@ bios_set_vesamode(int mode)
 }
 #pragma GCC pop_options
 
-static void screen_backup(void)
-{
-  int x,y;
-  int i=0;
-
-  for(y=0;y<25;y++) {
-    for(x=0;x<80;x++) {
-      if(i>=IPL_SCREENBUFSZ)
-        break;
-      screen_backup_buff[i]=bios_getscreen(x,y);
-      i++;
-    }
-  }
-}
-static void screen_restore(void)
-{
-  int i;
-
-  bios_setcursor(0, 0);
-  for(i=0;i<IPL_SCREENBUFSZ-1;i++) {
-    if(screen_backup_buff[i]>=' ')
-      bios_putc(screen_backup_buff[i]);
-    else
-      bios_putc(' ');
-  }
-}
 
 
 /* set up video mode */

@@ -20,6 +20,8 @@
 #include "mutex.h"
 #include "kmem.h"
 #include "timer.h"
+#include "errno.h"
+#include "dma.h"
 
 extern int syscall_entry_intr(void);
 
@@ -96,7 +98,7 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
     eax = syscall_wait(ebx);
     break;
   case SYSCALL_FN_SHM_CREATE:
-    eax = syscall_shm_create((unsigned int)ebx, (unsigned long)ecx);
+    eax = syscall_shm_create((unsigned int)ebx, (unsigned long)ecx, (unsigned int)edx);
     break;
   case SYSCALL_FN_SHM_SETNAME:
     eax = syscall_shm_setname(ebx, (unsigned int)ecx);
@@ -115,6 +117,12 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
     break;
   case SYSCALL_FN_SHM_UNMAP:
     eax = syscall_shm_unmap(ebx, (void *)ecx);
+    break;
+  case SYSCALL_FN_SHM_GETPHYSICAL:
+    eax = syscall_shm_getphysical(ebx, (unsigned int)ecx, (unsigned long *)edx);
+    break;
+  case SYSCALL_FN_SHM_PULL:
+    eax = syscall_shm_pull(ebx, (unsigned int)ecx, (void *)edx);
     break;
   case SYSCALL_FN_QUE_CREATE:
     eax = syscall_que_create((unsigned int)ebx);
@@ -230,7 +238,27 @@ int syscall_entry(int eax,int ebx,int ecx,int edx)
   case SYSCALL_FN_MTX_UNLOCK:
     eax = syscall_mtx_unlock((int *)ebx);
     break;
-
+  case SYSCALL_FN_DMA_SETMODE:
+    eax = syscall_dma_setmode( (unsigned int)ebx, (unsigned int)ecx );
+    break;
+  case SYSCALL_FN_DMA_ENABLE:
+    eax = syscall_dma_enable( (unsigned int)ebx, (unsigned int)ecx );
+    break;
+  case SYSCALL_FN_DMA_ALLOCBUFFER:
+    eax = syscall_dma_allocbuffer( (unsigned int)ebx, (unsigned long)ecx );
+    break;
+  case SYSCALL_FN_DMA_FREEBUFFER:
+    eax = syscall_dma_freebuffer( (unsigned int)ebx );
+    break;
+  case SYSCALL_FN_DMA_SETBUFFER:
+    eax = syscall_dma_setbuffer( (unsigned int)ebx );
+    break;
+  case SYSCALL_FN_DMA_PUSHBUFFER:
+    eax = syscall_dma_pushbuffer( (unsigned int)ebx, (void*)ecx );
+    break;
+  case SYSCALL_FN_DMA_PULLBUFFER:
+    eax = syscall_dma_pullbuffer( (unsigned int)ebx, (void*)ecx );
+    break;
   default:
     eax = -1;
   }
@@ -269,9 +297,9 @@ int syscall_wait(int c)
   return alarm_wait(c);
 }
 
-int syscall_shm_create(unsigned int shmname, unsigned long size)
+int syscall_shm_create(unsigned int shmname, unsigned long size, unsigned int options)
 {
-  return shm_create(shmname, size);
+  return shm_create(shmname, size, options);
 }
 int syscall_shm_setname(int shmid, unsigned int shmname)
 {
@@ -287,15 +315,33 @@ int syscall_shm_delete(int shmid)
 }
 int syscall_shm_getsize(int shmid, unsigned long *sizep)
 {
+  if((unsigned long)sizep < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return shm_get_size(shmid, sizep);
 }
 int syscall_shm_map(int shmid, void *vmem)
 {
+  if((unsigned long)vmem < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return shm_map(shmid, page_get_current_pgd(), vmem,(PAGE_TYPE_USER|PAGE_TYPE_RDWR));
 }
 int syscall_shm_unmap(int shmid, void *vmem)
 {
+  if((unsigned long)vmem < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return shm_unmap(shmid, page_get_current_pgd(), vmem);
+}
+int syscall_shm_getphysical(int shmid, unsigned int pagenum, unsigned long *addr)
+{
+  if((unsigned long)addr < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
+  return shm_get_physical(shmid, pagenum, addr);
+}
+int syscall_shm_pull(int shmid, unsigned int pagenum, void *addr)
+{
+  if((unsigned long)addr < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
+  return shm_pull(shmid, pagenum, addr);
 }
 
 int syscall_que_create(unsigned int quename)
@@ -312,14 +358,20 @@ int syscall_que_delete(int queid)
 }
 int syscall_que_put(int queid, void* msg)
 {
+  if((unsigned long)msg < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return queue_put(queid, msg);
 }
 int syscall_que_get(int queid, void *msg)
 {
+  if((unsigned long)msg < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return queue_get(queid, msg);
 }
 int syscall_que_tryget(int queid, void *msg)
 {
+  if((unsigned long)msg < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return queue_tryget(queid, msg);
 }
 int syscall_que_peeksize(int queid)
@@ -364,14 +416,20 @@ int syscall_pgm_allocate(char *name, int type, unsigned long size)
 }
 int syscall_pgm_loadimage(int taskid, void *image, unsigned long size)
 {
+  if((unsigned long)image < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return program_loadimage(taskid, image, size);
 }
 int syscall_pgm_setargs(int taskid, char *args, int argsize)
 {
+  if((unsigned long)args < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return program_set_args(taskid, args, argsize);
 }
 int syscall_pgm_getargs(int taskid, char *args, int argsize)
 {
+  if((unsigned long)args < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return program_get_args(taskid, args, argsize);
 }
 int syscall_pgm_start(int taskid, int exitque)
@@ -397,6 +455,8 @@ int syscall_pgm_getexitcode(int taskid)
 
 int syscall_pgm_list(int start, int count, void *plist)
 {
+  if((unsigned long)plist < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return program_list(start, count, plist);
 }
 
@@ -431,11 +491,15 @@ int syscall_file_closedir(unsigned long *vdirdesc)
 
 int syscall_krn_get_bios_info(char *binfo)
 {
+  if((unsigned long)binfo < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return kernel_get_bios_info(binfo);
 }
 
 int syscall_krn_memory_status(unsigned long *status)
 {
+  if((unsigned long)status < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   if(status) {
     *status++ = mem_get_totalsize();
     *status++ = page_get_totalfree()*PAGE_PAGESIZE;
@@ -447,6 +511,8 @@ int syscall_krn_memory_status(unsigned long *status)
 
 int syscall_krn_get_systime(void *systime)
 {
+  if((unsigned long)systime < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   timer_get_systime((void *)systime);
   return 0;
 }
@@ -462,17 +528,52 @@ int syscall_alarm_unset(int alarmid, int queid)
 
 int syscall_mtx_lock(int *mutex)
 {
+  if((unsigned long)mutex < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   mutex_lock(mutex);
   return 0;
 }
 
 int syscall_mtx_trylock(int *mutex)
 {
+  if((unsigned long)mutex < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   return mutex_trylock(mutex);
 }
 
 int syscall_mtx_unlock(int *mutex)
 {
+  if((unsigned long)mutex < CFG_MEM_KERNELMAX)
+    return ERRNO_NOTEXIST;
   mutex_unlock(mutex);
   return 0;
+}
+
+int syscall_dma_setmode( unsigned int channel, unsigned int mode )
+{
+  return dma_set_mode( channel, mode );
+}
+int syscall_dma_enable( unsigned int channel, unsigned int sw )
+{
+  return dma_enable( channel, sw );
+}
+int syscall_dma_allocbuffer(unsigned int channel, unsigned long size)
+{
+  return dma_alloc_buffer(channel, size);
+}
+int syscall_dma_freebuffer(unsigned int channel)
+{
+  return dma_free_buffer(channel);
+}
+int syscall_dma_setbuffer(unsigned int channel)
+{
+  return dma_set_buffer(channel);
+}
+int syscall_dma_pushbuffer(unsigned int channel, void* buf)
+{
+  return dma_push_buffer(channel, buf);
+}
+int syscall_dma_pullbuffer(unsigned int channel, void* buf)
+{
+  return dma_pull_buffer(channel, buf);
 }

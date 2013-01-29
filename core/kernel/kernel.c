@@ -112,44 +112,41 @@ void start(void)
 
   console_setup(&bios_info);
 
-  console_puts("Initializing GDT/IDT ...");
+  console_puts("VBE");
+  int2dec(vesa_info_table->ver_major,s);
+  console_puts(s);
+  console_puts(".");
+  int2dec(vesa_info_table->ver_minor,s);
+  console_puts(s);
+  console_puts("\n");
+  console_puts("Initializing Managers...");
+  console_puts(" GDT/IDT");
   desc_init_gdtidt();
   intr_init();
-  console_puts("done.\n");
-  console_puts("Initializing Exception Manager ...");
+  console_puts(" Exception");
   exception_init();
-  console_puts("done.\n");
-  console_puts("Initializing Memory Manager ...");
+  console_puts(" Memory");
   mem_init();
-  console_puts("done.\n");
-  console_puts("Initializing Page Manager ...");
+  console_puts(" Page");
   page_init();
-  console_puts("done.\n");
 
-  console_puts("Initializing Shared Memory Manager ...");
+  console_puts(" Shared-Memory");
   shm_init();
-  console_puts("done.\n");
-  console_puts("Initializing Task Manager ...");
+  console_puts(" Task");
   task_init();
-  console_puts("done.\n");
-  console_puts("Initializing Queue Manager ...");
+  console_puts(" Queue");
   queue_init();
-  console_puts("done.\n");
-  console_puts("Initializing Alarm Manager ...");
+  console_puts(" Alarm");
   alarm_init();
-  console_puts("done.\n");
-  console_puts("Initializing PIC Manager ...");
+  console_puts(" PIC");
   pic_init();
-  console_puts("done.\n");
-  console_puts("Initializing Timer ...");
+  console_puts(" Timer");
   timer_init();
-  console_puts("done.\n");
-  console_puts("Initializing System Call ...");
+  console_puts(" System-Call");
   syscall_init();
-  console_puts("done.\n");
-  console_puts("Initializing FPU ...");
+  console_puts(" FPU");
   fpu_init();
-  console_puts("done.\n");
+  console_puts(" ... Done.\n");
 
   cpu_unlock();
 

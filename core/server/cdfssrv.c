@@ -999,7 +999,7 @@ int cdfs_getdevice(struct cdfs_device *device)
       device->shmname=BLOCK_SHM_ID;
       device->offset=cdfs_block_offset;
       device->buf=cdfs_block_buf;
-      display_puts("cdfsd:Found the CD-ROM Drive on the device ");
+      display_puts("cdfsd:Found a CD-ROM Drive on the device ");
       int2dec(devid,s);
       display_puts("\n");
       return 0;

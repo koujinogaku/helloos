@@ -518,10 +518,19 @@ page_create_pgd(void)
   else
     kernelmax=CFG_MEM_KERNELHEAP;
 
-  r=page_map_vmem(pgd, 0, 0, kernelmax, (PAGE_TYPE_RDWR|PAGE_TYPE_SUPER));
-  if(r<0) {
+  // Kernel Area (Low-Memory)
+  r=page_map_vmem(pgd, 0, 0, CFG_MEM_VIDEOBIOSSTART, (PAGE_TYPE_RDWR|PAGE_TYPE_SUPER));
+  if(r<0)
      return NULL;
-  }
+  // BIOS & Enhanced-BIOS & Video-BIOS ROM Area
+  r=page_map_vmem(pgd, (void*)CFG_MEM_VIDEOBIOSSTART, (void*)CFG_MEM_VIDEOBIOSSTART, CFG_MEM_BIOSMAX-CFG_MEM_VIDEOBIOSSTART, (PAGE_TYPE_RDONLY|PAGE_TYPE_USER));
+  if(r<0)
+     return NULL;
+  // Kernel Area (High-Memory)
+  r=page_map_vmem(pgd, (void*)CFG_MEM_BIOSMAX, (void*)CFG_MEM_BIOSMAX, kernelmax-CFG_MEM_BIOSMAX, (PAGE_TYPE_RDWR|PAGE_TYPE_SUPER));
+  if(r<0)
+     return NULL;
+
   if(page_unmap_vpage(pgd, (void*)CFG_MEM_PAGEWINDOW)==NULL)
     return NULL;
 

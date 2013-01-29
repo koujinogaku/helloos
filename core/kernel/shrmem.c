@@ -9,6 +9,7 @@
 #include "errno.h"
 #include "shrmem.h"
 #include "mutex.h"
+#include "string.h"
 
 #define SHM_STAT_NOTUSE 0
 #define SHM_STAT_USED   1
@@ -22,6 +23,7 @@ struct SHM {
   int *pages;
   unsigned int pagecnt;
   unsigned int mappedcnt;
+  unsigned int options;
 };
 
 #define SHM_TBLSZ 128
@@ -48,7 +50,7 @@ console_puts("\n");
   return 0;
 }
 
-int shm_create(unsigned int shmname, unsigned long size)
+int shm_create(unsigned int shmname, unsigned long size, unsigned int options)
 {
   struct SHM *shm;
   int shm_idx,i;
@@ -77,15 +79,37 @@ int shm_create(unsigned int shmname, unsigned long size)
     return ERRNO_RESOURCE;
   }
   shm=&shmtbl[shm_idx];
-  if(shm->pages) {
-    mutex_unlock(&shm_tbl_mutex);
-    return ERRNO_RESOURCE;
-  }
   shm->status=SHM_STAT_USED;
+  shm->mappedcnt=0;
+  shm->id=shm_idx;
+  shm->name=shmname;
+  shm->options=options;
 
 //console_puts("[c]");
 
-  shm->pages = mem_alloc(SHM_MAXPAGES*sizeof(unsigned int));
+  if(options&SHM_OPT_KERNEL) {
+    // alloc on kernel
+    shm->pagecnt=size;
+    shm->pages = mem_alloc(size);
+    if(shm->pages==0) {
+      shm->status=SHM_STAT_NOTUSE;
+      mutex_unlock(&shm_tbl_mutex);
+      return ERRNO_RESOURCE;
+    }
+    *(shm->pages)=1;
+    list_add(shmtbl,shm);
+    mutex_unlock(&shm_tbl_mutex);
+    return shm_idx;
+  }
+
+  // alloc on page pool
+  shm->pagecnt=pagecnt;
+  shm->pages = mem_alloc(pagecnt*sizeof(unsigned int));
+  if(shm->pages==0) {
+    shm->status=SHM_STAT_NOTUSE;
+    mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_RESOURCE;
+  }
   for(i=0;i<pagecnt;i++) {
     shm->pages[i]=(int)page_alloc();
 /*
@@ -96,16 +120,12 @@ console_puts(" ");
     if(shm->pages[i]==0) {
       for(i--;i>=0;i--)
         page_free((void *)shm->pages[i]);
-      page_free(shm->pages);
+      mem_free(shm->pages,pagecnt*sizeof(unsigned int));
       shm->status=SHM_STAT_NOTUSE;
       mutex_unlock(&shm_tbl_mutex);
       return ERRNO_RESOURCE;
     }
   }
-  shm->pagecnt=pagecnt;
-  shm->mappedcnt=0;
-  shm->id=shm_idx;
-  shm->name=shmname;
 
   list_add(shmtbl,shm);
 
@@ -183,11 +203,17 @@ int shm_delete(int shmid)
 
   list_del(shm);
 
+  if(shm->options&SHM_OPT_KERNEL) {
+    mem_free(shm->pages,shm->pagecnt);
+    shm->status=SHM_STAT_NOTUSE;
+    mutex_unlock(&shm_tbl_mutex);
+    return 0;
+  }
+
   for(i=0;i<shm->pagecnt;i++) {
     page_free((void*)shm->pages[i]);
   }
-  mem_free(shm->pages,SHM_MAXPAGES*sizeof(unsigned int));
-
+  mem_free(shm->pages,shm->pagecnt*sizeof(unsigned int));
   shm->status=SHM_STAT_NOTUSE;
 
   mutex_unlock(&shm_tbl_mutex);
@@ -206,7 +232,10 @@ int shm_get_size(int shmid, unsigned long *size)
   }
   shm=&(shmtbl[shmid]);
 
-  *size = shm->pagecnt*PAGE_PAGESIZE;
+  if(shm->options&SHM_OPT_KERNEL)
+    *size = shm->pagecnt;
+  else
+    *size = shm->pagecnt*PAGE_PAGESIZE;
 
   mutex_unlock(&shm_tbl_mutex);
   return 0;
@@ -225,6 +254,11 @@ int shm_map(int shmid,void *pgd, void *vmem, int type)
     return ERRNO_NOTEXIST;
   }
   shm=&(shmtbl[shmid]);
+
+  if(shm->options&SHM_OPT_KERNEL) {
+    mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_MODE;
+  }
 
   for(vpage=(unsigned int)vmem,i=0; i<shm->pagecnt; i++,vpage+=PAGE_PAGESIZE)
   {
@@ -254,6 +288,11 @@ int shm_unmap(int shmid,void *pgd, void *vmem)
   }
   shm=&(shmtbl[shmid]);
 
+  if(shm->options&SHM_OPT_KERNEL) {
+    mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_MODE;
+  }
+
   for(vpage=(unsigned int)vmem,i=0; i<shm->pagecnt; i++,vpage+=PAGE_PAGESIZE)
   {
     ppage=page_get_ppage(pgd, (void*)vpage);
@@ -278,6 +317,60 @@ console_puts("]");
   }
   shm->mappedcnt--;
 
+  mutex_unlock(&shm_tbl_mutex);
+  return 0;
+}
+int shm_get_physical(int shmid, unsigned int pagenum, unsigned long *addr)
+{
+  struct SHM *shm;
+
+  mutex_lock(&shm_tbl_mutex);
+
+  if(shm_not_exist(shmid)) {
+    mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_NOTEXIST;
+  }
+  shm=&(shmtbl[shmid]);
+
+  if(shm->options&SHM_OPT_KERNEL) {
+    *addr = (unsigned long)(shm->pages);
+  }
+  else {
+    if(pagenum<shm->pagecnt) {
+      *addr = (unsigned long)(shm->pages[pagenum]);
+    }
+    else {
+      mutex_unlock(&shm_tbl_mutex);
+      return ERRNO_OVER;
+    }
+  }
+  mutex_unlock(&shm_tbl_mutex);
+  return 0;
+}
+int shm_pull(int shmid, unsigned int pagenum, void *addr)
+{
+  struct SHM *shm;
+
+  mutex_lock(&shm_tbl_mutex);
+
+  if(shm_not_exist(shmid)) {
+    mutex_unlock(&shm_tbl_mutex);
+    return ERRNO_NOTEXIST;
+  }
+  shm=&(shmtbl[shmid]);
+
+  if(shm->options&SHM_OPT_KERNEL) {
+    memcpy(addr,shm->pages,shm->pagecnt);
+  }
+  else {
+    if(pagenum<shm->pagecnt) {
+      memcpy(addr,(void*)(shm->pages[pagenum]),PAGE_PAGESIZE);
+    }
+    else {
+      mutex_unlock(&shm_tbl_mutex);
+      return ERRNO_OVER;
+    }
+  }
   mutex_unlock(&shm_tbl_mutex);
   return 0;
 }
